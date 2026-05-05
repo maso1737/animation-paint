@@ -452,8 +452,8 @@ input[type=range]::-moz-range-thumb{
 }
 #time-track-inner{
   position:absolute;
-  top:0;left:0;height:100%;
-  /* widthはJSで設定、frame-stripと同期 */
+  top:0;left:4px;height:100%;
+  /* widthはJSで設定、frame-stripと同期 (frame-stripのpadding-left:4pxに合わせる) */
 }
 .time-tick{
   position:absolute;top:0;
@@ -838,6 +838,8 @@ input[type=range]::-moz-range-thumb{
       <span>EDIT MODE</span>
     </div>
     <div class="right">
+      <button id="btn-flip" title="キャンバス左右反転（表示のみ）">FLIP</button>
+      <button id="btn-mirror" title="左右ミラー描画">MIRROR</button>
       <button id="btn-clear">CLEAR</button>
       <button id="btn-export">EXPORT 4K</button>
     </div>
@@ -917,6 +919,7 @@ input[type=range]::-moz-range-thumb{
       <canvas class="layer" id="onion-prev"></canvas>
       <canvas class="layer" id="onion-next"></canvas>
       <canvas class="layer" id="draw-layer"></canvas>
+      <div id="mirror-guide" style="display:none;position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,80,80,0.7);box-shadow:0 0 6px rgba(255,80,80,0.6);pointer-events:none;z-index:10;"></div>
     </div>
     <div id="stage-hud">
       <span id="hud-coord">— · —</span>
@@ -953,17 +956,16 @@ input[type=range]::-moz-range-thumb{
       <span class="lbl">FPS</span>
       <input type="number" class="fps-input" id="fps-input" value="24" min="1" max="60">
       <span class="sep">|</span>
-      <span class="lbl">FRAME</span>
-      <span class="frame-pos" id="frame-pos">001 / 001</span>
+      <span class="lbl">OUT</span>
+      <span class="frame-pos" id="frame-pos">001コマ / 001コマ</span>
       <span class="sep">|</span>
       <span class="lbl">TIME</span>
-      <span class="frame-pos" id="dur-info">00:00.00 / 00:00.04</span>
+      <span class="frame-pos" id="dur-info">000 / 000 コマ</span>
       <span class="sep">|</span>
       <span class="lbl">WORK</span>
-      <span class="frame-pos" id="work-info">00:00.00 - 00:00.04</span>
+      <span class="frame-pos" id="work-info">001 - 001 コマ</span>
       <div class="right">
         <button id="btn-onion" title="オニオンスキン (O)">ONION</button>
-        <button id="btn-loop" class="on" title="ループ再生">LOOP</button>
         <button id="btn-add-frame" title="新規フレーム (N)">+ FRAME</button>
         <button id="btn-dup-frame" title="複製 (D)">DUPLICATE</button>
         <button id="btn-del-frame" title="削除 (Del)">DELETE</button>
@@ -1146,6 +1148,12 @@ const state = {
   workEnd: 0,      // 終了コマ番号（exclusive）
   // 'select' | 'edit' などモード判別。当面 edit のみ
   mode: 'edit',
+  // キャンバス左右反転（表示のみ）
+  flipped: false,
+  // 左右ミラー描画
+  mirrorOn: false,
+  // ミラー軸 (x座標, キャンバス座標系)。デフォルトは中央。
+  mirrorAxisX: 1024,
 };
 
 // ツール現在サイズ取得（ツールに応じて切替）
@@ -1208,8 +1216,10 @@ function applyZoom(){
   const h = CFG.WORK_H * state.zoom;
   wrap.style.width  = w + 'px';
   wrap.style.height = h + 'px';
-  // パンによるオフセット (中央配置 + pan)
-  wrap.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+  // パンによるオフセット (中央配置 + pan) + 表示反転
+  const sx = state.flipped ? -1 : 1;
+  wrap.style.transform = `translate(${state.panX}px, ${state.panY}px) scaleX(${sx})`;
+  wrap.style.transformOrigin = '50% 50%';
   [bgCanvas, drawCanvas, onionPrev, onionNext].forEach(c => {
     c.style.width  = w + 'px';
     c.style.height = h + 'px';
@@ -1226,10 +1236,17 @@ function applyZoom(){
 // ============================================================
 function toCanvasCoord(clientX, clientY){
   const r = drawCanvas.getBoundingClientRect();
-  const x = (clientX - r.left) / r.width  * CFG.WORK_W;
+  let x = (clientX - r.left) / r.width  * CFG.WORK_W;
   const y = (clientY - r.top)  / r.height * CFG.WORK_H;
+  // 表示反転中はx座標を反転
+  if(state.flipped) x = CFG.WORK_W - 1 - x;
   // 整数化（アンチエイリアスOFFのため）
   return { x: Math.floor(x), y: Math.floor(y) };
+}
+
+// ミラー描画用: x座標を軸で反転
+function mirrorX(x){
+  return Math.round((state.mirrorAxisX || (CFG.WORK_W/2)) * 2 - x);
 }
 
 // ============================================================
@@ -1578,12 +1595,12 @@ function addFrame(copyFromCurrent = false){
 
 // 現在フレーム削除
 async function deleteCurrentFrame(){
+  // 確認ダイアログなし版
   if(state.frames.length <= 1){
     await modalAlert('最低1フレーム必要です。');
     return;
   }
-  const ok = await modalConfirm(`フレーム ${state.currentFrame + 1} を削除しますか？`);
-  if(!ok) return;
+  // 確認ダイアログ削除（即削除）
   // 描画中なら確定（履歴push）。ただしsyncはこの後フレームが消えるので不要
   if(drawing) endStroke();
   const removed = state.frames.splice(state.currentFrame, 1)[0];
@@ -1735,6 +1752,8 @@ function buildStrip(){
     // duration変更（クリックでサイクル: 1, 2, 3）
     meta.querySelector('.fc-dur').addEventListener('click', e => {
       e.stopPropagation();
+      // 4コマ以上に伸ばされている場合は誤タップ防止のため無効
+      if(f.duration > 3) return;
       const cycle = [1, 2, 3];
       const cur = cycle.indexOf(f.duration);
       if(cur === -1){
@@ -1952,6 +1971,8 @@ function setupScrubHandle(handle, cell, frame, idx){
 // 末尾の空タッチ領域: 任意位置タッチで「前フレームを伸ばす + 新フレーム」
 function setupEmptyTail(tail){
   tail.addEventListener('pointerdown', e => {
+    // 指でのタップは無効（ネイティブスクロール優先・誤動作防止）
+    if(e.pointerType === 'touch') return;
     e.preventDefault();
     const tailRect = tail.getBoundingClientRect();
     const xInTail = e.clientX - tailRect.left;
@@ -2000,8 +2021,11 @@ function updateStripUI(){
 }
 
 function updateFramePos(){
+  // 現在フレームのアウト点（終端ティック）をコマ数と秒で表示
+  const outTick = state.frames.slice(0, state.currentFrame + 1).reduce((s, f) => s + f.duration, 0);
+  const sec = (outTick / state.fps).toFixed(2);
   document.getElementById('frame-pos').textContent =
-    String(state.currentFrame+1).padStart(3,'0') + ' / ' + String(state.frames.length).padStart(3,'0');
+    String(outTick).padStart(3,'0') + 'コマ / ' + sec + 's';
 }
 
 // 全体時間と現在時間表示
@@ -2018,10 +2042,12 @@ function ticksToMs(ticks){
 function updateDurInfo(){
   const total = totalTicks();
   const curT = state.frames.slice(0, state.currentFrame).reduce((s, f) => s + f.duration, 0);
+  // TIME: 現在位置/全体 を コマ数表記
   document.getElementById('dur-info').textContent =
-    `${fmtTimeMs(ticksToMs(curT))} / ${fmtTimeMs(ticksToMs(total))}`;
+    `${String(curT).padStart(3,'0')} / ${String(total).padStart(3,'0')} コマ`;
+  // WORK: 1始まり表記（人間向け）
   document.getElementById('work-info').textContent =
-    `${fmtTimeMs(ticksToMs(state.workStart))} - ${fmtTimeMs(ticksToMs(state.workEnd))}`;
+    `${String(state.workStart + 1).padStart(3,'0')} - ${String(state.workEnd).padStart(3,'0')} コマ`;
 }
 
 function scrollFrameIntoView(idx){
@@ -2292,8 +2318,10 @@ function startStroke(clientX, clientY){
   drawing = true;
   if(state.tool === 'pen'){
     drawDot(drawCtx, x, y, currentToolSize(), INK[state.inkColor]);
+    if(state.mirrorOn) drawDot(drawCtx, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
   } else if(state.tool === 'erase'){
     eraseDot(drawCtx, x, y, currentToolSize());
+    if(state.mirrorOn) eraseDot(drawCtx, mirrorX(x), y, currentToolSize());
   }
 }
 function continueStroke(clientX, clientY){
@@ -2301,8 +2329,10 @@ function continueStroke(clientX, clientY){
   const {x, y} = smoothPoint(raw.x, raw.y);
   if(state.tool === 'pen'){
     drawLine(drawCtx, lastX, lastY, x, y, currentToolSize(), INK[state.inkColor]);
+    if(state.mirrorOn) drawLine(drawCtx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
   } else if(state.tool === 'erase'){
     eraseLine(drawCtx, lastX, lastY, x, y, currentToolSize());
+    if(state.mirrorOn) eraseLine(drawCtx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize());
   }
   lastX = x; lastY = y;
 }
@@ -2587,12 +2617,11 @@ const bgThumb = document.getElementById('tb-bg-thumb');
 const bgValEl = document.getElementById('tb-bg-val');
 
 function setBgBright(v){
-  v = Math.max(50, Math.min(100, v));
+  v = Math.max(0, Math.min(100, v));
   state.bgBright = Math.round(v);
-  // サム位置: 値100 → top:0% (上), 値50 → top:100% (下)
-  // 値はtrackの高さに沿って % 表示
-  const pct = (100 - state.bgBright) / 50; // 0..1
-  bgThumb.style.bottom = ((1 - pct) * 100) + '%';
+  // サム位置: 値100 → 上, 値0 → 下
+  const pct = state.bgBright / 100; // 0..1
+  bgThumb.style.bottom = (pct * 100) + '%';
   bgValEl.textContent = state.bgBright;
   // 背景を再描画
   const grey = Math.round(state.bgBright * 2.55);
@@ -2604,8 +2633,8 @@ function bgTrackHandler(e){
   const r = bgTrack.getBoundingClientRect();
   const y = e.clientY - r.top;
   const ratio = 1 - Math.max(0, Math.min(1, y / r.height)); // 上=1, 下=0
-  // 50..100 にマッピング
-  setBgBright(50 + ratio * 50);
+  // 0..100 にマッピング（0で真っ黒）
+  setBgBright(ratio * 100);
   markMetaDirty();
 }
 bgTrack.addEventListener('pointerdown', e => {
@@ -2622,9 +2651,7 @@ bgTrack.addEventListener('pointermove', e => {
 setBgBright(100);
 
 // クリア
-document.getElementById('btn-clear').addEventListener('click', async () => {
-  const ok = await modalConfirm('すべての線を消去します。よろしいですか？');
-  if(!ok) return;
+document.getElementById('btn-clear').addEventListener('click', () => {
   drawCtx.clearRect(0, 0, CFG.WORK_W, CFG.WORK_H);
   pushHistory();
 });
@@ -2644,13 +2671,44 @@ document.getElementById('zoom-out').addEventListener('click', () => {
 });
 document.getElementById('zoom-fit').addEventListener('click', fitToStage);
 
-// ピンチズーム & ホイールズーム（カーソル中心）
+// ホイールズーム（Ctrl不要、Altは予約）
 stage.addEventListener('wheel', e => {
-  if(!e.ctrlKey && !e.metaKey) return;
+  if(e.altKey) return; // Alt+ホイールはセル幅伸縮側で使用
   e.preventDefault();
   const factor = e.deltaY > 0 ? 0.9 : 1.111;
   zoomAt(e.clientX, e.clientY, state.zoom * factor);
 }, { passive: false });
+
+// 中ボタン（ホイール押下）でパン
+let midPanning = false;
+let midPanStart = {x:0, y:0};
+let midPanStartPan = {x:0, y:0};
+stage.addEventListener('pointerdown', e => {
+  if(e.pointerType !== 'mouse' || e.button !== 1) return;
+  e.preventDefault();
+  stage.setPointerCapture(e.pointerId);
+  midPanning = true;
+  midPanStart = { x: e.clientX, y: e.clientY };
+  midPanStartPan = { x: state.panX, y: state.panY };
+  stage.style.cursor = 'grabbing';
+});
+stage.addEventListener('pointermove', e => {
+  if(!midPanning) return;
+  state.panX = midPanStartPan.x + (e.clientX - midPanStart.x);
+  state.panY = midPanStartPan.y + (e.clientY - midPanStart.y);
+  state.fitMode = false;
+  applyZoom();
+});
+function endMidPan(e){
+  if(!midPanning) return;
+  midPanning = false;
+  stage.style.cursor = '';
+}
+stage.addEventListener('pointerup', endMidPan);
+stage.addEventListener('pointercancel', endMidPan);
+// 中ボタンのオートスクロール抑止
+stage.addEventListener('auxclick', e => { if(e.button === 1) e.preventDefault(); });
+stage.addEventListener('mousedown', e => { if(e.button === 1) e.preventDefault(); });
 
 // 指定スクリーン座標を中心にズーム
 function zoomAt(screenX, screenY, newZoom){
@@ -3149,9 +3207,17 @@ document.getElementById('btn-onion').addEventListener('click', e => {
   e.target.classList.toggle('on', state.onionOn);
   updateOnion();
 });
-document.getElementById('btn-loop').addEventListener('click', e => {
-  state.loop = !state.loop;
-  e.target.classList.toggle('on', state.loop);
+// LOOPボタンは廃止（常時LOOP）
+document.getElementById('btn-flip').addEventListener('click', e => {
+  state.flipped = !state.flipped;
+  e.target.classList.toggle('on', state.flipped);
+  applyZoom();
+});
+document.getElementById('btn-mirror').addEventListener('click', e => {
+  state.mirrorOn = !state.mirrorOn;
+  e.target.classList.toggle('on', state.mirrorOn);
+  const guide = document.getElementById('mirror-guide');
+  if(guide) guide.style.display = state.mirrorOn ? 'block' : 'none';
 });
 document.getElementById('btn-add-frame').addEventListener('click', () => addFrame(false));
 document.getElementById('btn-dup-frame').addEventListener('click', () => addFrame(true));
@@ -3180,6 +3246,46 @@ document.getElementById('frame-strip').addEventListener('wheel', e => {
     buildStrip();
   }
 }, { passive: false, capture: true });
+
+// ============================================================
+// タイムライン領域での 2本指/3本指タップ → Undo/Redo
+// （描画キャンバスとは独立した検出。ストリップのスクロールを邪魔しない）
+// ============================================================
+(function setupStripTapGestures(){
+  const stripArea = document.getElementById('strip-area');
+  if(!stripArea) return;
+  const tps = new Map(); // pointerId -> {x,y,startX,startY,startT}
+  let sessStart = 0;
+  let sessMaxFingers = 0;
+  const TT = 300, TM = 12;
+  stripArea.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'touch') return;
+    const now = performance.now();
+    if(tps.size === 0){ sessStart = now; sessMaxFingers = 0; }
+    tps.set(e.pointerId, { x:e.clientX, y:e.clientY, startX:e.clientX, startY:e.clientY, startT:now });
+    if(tps.size > sessMaxFingers) sessMaxFingers = tps.size;
+  });
+  stripArea.addEventListener('pointermove', e => {
+    const p = tps.get(e.pointerId);
+    if(p){ p.x = e.clientX; p.y = e.clientY; }
+  });
+  function end(e){
+    const p = tps.get(e.pointerId);
+    if(!p) return;
+    tps.delete(e.pointerId);
+    if(tps.size === 0){
+      const elapsed = performance.now() - sessStart;
+      const moved = Math.hypot(p.x - p.startX, p.y - p.startY);
+      if(elapsed < TT && moved < TM){
+        if(sessMaxFingers === 2){ undo(); }
+        else if(sessMaxFingers === 3){ redo(); }
+      }
+      sessMaxFingers = 0;
+    }
+  }
+  stripArea.addEventListener('pointerup', end);
+  stripArea.addEventListener('pointercancel', end);
+})();
 
 // ============================================================
 // KEYBOARD

@@ -61,6 +61,12 @@ html,body{
 }
 #topbar button:hover{border-color:var(--border-bright);color:var(--acid);}
 #topbar button:active{background:rgba(54,255,0,0.1);}
+#topbar button.on{
+  background:rgba(54,255,0,0.12);
+  border-color:var(--acid);
+  color:var(--acid);
+  box-shadow:0 0 8px rgba(54,255,0,0.35);
+}
 
 /* ── 左ツールバー ── */
 #toolbar{
@@ -452,8 +458,7 @@ input[type=range]::-moz-range-thumb{
 }
 #time-track-inner{
   position:absolute;
-  top:0;left:4px;height:100%;
-  /* widthはJSで設定、frame-stripと同期 (frame-stripのpadding-left:4pxに合わせる) */
+  top:0;left:28px;height:100%; /* JSのsyncTimeTrackScrollで動的に更新 */
 }
 .time-tick{
   position:absolute;top:0;
@@ -705,6 +710,7 @@ input[type=range]::-moz-range-thumb{
   cursor:ew-resize;
   background:transparent;
   z-index:5;
+  touch-action:none; /* iPadでのコマ伸縮をブラウザスクロールより優先 */
 }
 .fc-handle::after{
   /* タッチ環境用の不可視ヒットエリア拡張 */
@@ -919,8 +925,9 @@ input[type=range]::-moz-range-thumb{
       <canvas class="layer" id="onion-prev"></canvas>
       <canvas class="layer" id="onion-next"></canvas>
       <canvas class="layer" id="draw-layer"></canvas>
-      <div id="mirror-guide" style="display:none;position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,80,80,0.7);box-shadow:0 0 6px rgba(255,80,80,0.6);pointer-events:none;z-index:10;"></div>
     </div>
+    <!-- ミラーガイド: stage基準で配置（ズーム/パンに追従しない固定ライン） -->
+    <div id="mirror-guide" style="display:none;position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,80,80,0.7);box-shadow:0 0 6px rgba(255,80,80,0.6);pointer-events:none;z-index:20;transform:translateX(-50%);"></div>
     <div id="stage-hud">
       <span id="hud-coord">— · —</span>
     </div>
@@ -956,14 +963,13 @@ input[type=range]::-moz-range-thumb{
       <span class="lbl">FPS</span>
       <input type="number" class="fps-input" id="fps-input" value="24" min="1" max="60">
       <span class="sep">|</span>
-      <span class="lbl">OUT</span>
-      <span class="frame-pos" id="frame-pos">001コマ / 001コマ</span>
+      <span class="lbl">IN</span>
+      <span class="frame-pos" id="frame-in">001</span>
+      <span class="lbl" style="margin-left:4px">OUT</span>
+      <span class="frame-pos" id="frame-pos">001コマ / 0.04s</span>
       <span class="sep">|</span>
       <span class="lbl">TIME</span>
-      <span class="frame-pos" id="dur-info">000 / 000 コマ</span>
-      <span class="sep">|</span>
-      <span class="lbl">WORK</span>
-      <span class="frame-pos" id="work-info">001 - 001 コマ</span>
+      <span class="frame-pos" id="dur-info">001コマ / 0.04s</span>
       <div class="right">
         <button id="btn-onion" title="オニオンスキン (O)">ONION</button>
         <button id="btn-add-frame" title="新規フレーム (N)">+ FRAME</button>
@@ -1228,6 +1234,28 @@ function applyZoom(){
     state.fitMode ? 'FIT' : Math.round(state.zoom*100)+'%';
   document.getElementById('zoom-val').textContent =
     Math.round(state.zoom*100)+'%';
+  updateMirrorGuide();
+}
+
+// ミラー軸ガイドラインをズーム・パン・flipに追従させる
+function updateMirrorGuide(){
+  const guide = document.getElementById('mirror-guide');
+  if(!guide) return;
+  if(!state.mirrorOn){ guide.style.display = 'none'; return; }
+  guide.style.display = 'block';
+  // canvas-wrap の画面上の bounding rect から軸の screen X を計算
+  const stageRect = stage.getBoundingClientRect();
+  const wrapRect  = wrap.getBoundingClientRect();
+  let screenX;
+  if(state.flipped){
+    // flip時: mirrorAxisX は canvas右から数える
+    screenX = wrapRect.right - state.mirrorAxisX * state.zoom;
+  } else {
+    screenX = wrapRect.left + state.mirrorAxisX * state.zoom;
+  }
+  const guideLeft = screenX - stageRect.left;
+  guide.style.left = guideLeft + 'px';
+  guide.style.transform = 'none';
 }
 
 // ============================================================
@@ -1244,9 +1272,10 @@ function toCanvasCoord(clientX, clientY){
   return { x: Math.floor(x), y: Math.floor(y) };
 }
 
-// ミラー描画用: x座標を軸で反転
+// ミラー描画用: x座標を軸で反転（キャンバス範囲内にクランプ）
 function mirrorX(x){
-  return Math.round((state.mirrorAxisX || (CFG.WORK_W/2)) * 2 - x);
+  const axis = state.mirrorAxisX || (CFG.WORK_W / 2);
+  return Math.max(0, Math.min(CFG.WORK_W - 1, Math.round(axis * 2 - x)));
 }
 
 // ============================================================
@@ -1600,20 +1629,40 @@ async function deleteCurrentFrame(){
     await modalAlert('最低1フレーム必要です。');
     return;
   }
-  // 確認ダイアログ削除（即削除）
-  // 描画中なら確定（履歴push）。ただしsyncはこの後フレームが消えるので不要
+  // 確認なし即削除：描画フレームを「空ブロック」に置き換え（タイムライン尺を維持）
   if(drawing) endStroke();
-  const removed = state.frames.splice(state.currentFrame, 1)[0];
-  // IndexedDBから削除
-  if(db){
-    try {
-      const tx = db.transaction(CFG.STORE_FRAMES, 'readwrite');
-      tx.objectStore(CFG.STORE_FRAMES).delete(removed.id);
-    } catch(e){ console.warn(e); }
-  }
-  // カレント位置調整（範囲超えていたら最後のフレームへ）
-  if(state.currentFrame >= state.frames.length){
-    state.currentFrame = state.frames.length - 1;
+  const removed = state.frames[state.currentFrame];
+  if(removed.kind === 'draw'){
+    // 空ブロックに変換（drawDataは持たない）
+    const emptyBlock = {
+      id: removed.id,
+      kind: 'empty',
+      duration: removed.duration,
+      history: [],
+      histIdx: -1,
+      thumbCanvas: removed.thumbCanvas, // サムネは使わないが保持
+    };
+    state.frames[state.currentFrame] = emptyBlock;
+    // IndexedDBからdrawデータを削除
+    if(db){
+      try {
+        const tx = db.transaction(CFG.STORE_FRAMES, 'readwrite');
+        tx.objectStore(CFG.STORE_FRAMES).delete(removed.id);
+      } catch(e){ console.warn(e); }
+    }
+    markMetaDirty();
+  } else {
+    // 既に空ブロックの場合は完全削除
+    state.frames.splice(state.currentFrame, 1);
+    if(db){
+      try {
+        const tx = db.transaction(CFG.STORE_FRAMES, 'readwrite');
+        tx.objectStore(CFG.STORE_FRAMES).delete(removed.id);
+      } catch(e){ console.warn(e); }
+    }
+    if(state.currentFrame >= state.frames.length){
+      state.currentFrame = state.frames.length - 1;
+    }
   }
   // 直接フレームをロード（switchToFrameを使うと削除前の内容がこのフレームに上書きされるバグになる）
   ensureWorkAreaValid();
@@ -2021,11 +2070,16 @@ function updateStripUI(){
 }
 
 function updateFramePos(){
-  // 現在フレームのアウト点（終端ティック）をコマ数と秒で表示
-  const outTick = state.frames.slice(0, state.currentFrame + 1).reduce((s, f) => s + f.duration, 0);
-  const sec = (outTick / state.fps).toFixed(2);
+  // IN = 現在フレームの開始ティック（1始まり表記）
+  const inTick  = state.frames.slice(0, state.currentFrame).reduce((s, f) => s + f.duration, 0);
+  // OUT = 現在フレームの終端ティック
+  const outTick = inTick + (state.frames[state.currentFrame]?.duration || 1);
+  const inSec   = (inTick  / state.fps).toFixed(2);
+  const outSec  = (outTick / state.fps).toFixed(2);
+  const inEl = document.getElementById('frame-in');
+  if(inEl) inEl.textContent = String(inTick + 1).padStart(3,'0');
   document.getElementById('frame-pos').textContent =
-    String(outTick).padStart(3,'0') + 'コマ / ' + sec + 's';
+    String(outTick).padStart(3,'0') + 'コマ / ' + outSec + 's';
 }
 
 // 全体時間と現在時間表示
@@ -2041,13 +2095,10 @@ function ticksToMs(ticks){
 }
 function updateDurInfo(){
   const total = totalTicks();
-  const curT = state.frames.slice(0, state.currentFrame).reduce((s, f) => s + f.duration, 0);
-  // TIME: 現在位置/全体 を コマ数表記
+  const totalSec = (total / state.fps).toFixed(2);
+  // TIME: 全体コマ数 / 全体秒数
   document.getElementById('dur-info').textContent =
-    `${String(curT).padStart(3,'0')} / ${String(total).padStart(3,'0')} コマ`;
-  // WORK: 1始まり表記（人間向け）
-  document.getElementById('work-info').textContent =
-    `${String(state.workStart + 1).padStart(3,'0')} - ${String(state.workEnd).padStart(3,'0')} コマ`;
+    `${String(total).padStart(3,'0')}コマ / ${totalSec}s`;
 }
 
 function scrollFrameIntoView(idx){
@@ -2073,6 +2124,7 @@ function updateTimeTrack(){
   // 1秒ごとに「秒」目盛、6コマ（4分の1秒）ごとに小目盛
   const minorEvery = Math.max(1, Math.floor(fps / 4));
   for(let t = 0; t <= total; t += minorEvery){
+    if(t === 0) continue; // 先頭0sラベルは表示しない
     const x = tickToPx(t);
     const tick = document.createElement('div');
     tick.className = 'time-tick';
@@ -2106,10 +2158,21 @@ function updateTimeTrack(){
 }
 
 // ストリップのscrollLeftと time-track-inner を同期
+// strip-wrap（strip-prevの右隣）の左端に合わせてオフセットを計算
 function syncTimeTrackScroll(){
   const strip = document.getElementById('frame-strip');
   const inner = document.getElementById('time-track-inner');
+  const track = document.getElementById('time-track');
+  const stripWrap = document.getElementById('strip-wrap');
   if(!strip || !inner) return;
+  // strip-wrap の左端 - time-track の左端 + frame-strip の padding-left(4px)
+  let offsetLeft = 28; // デフォルト: strip-prev(24px) + padding(4px)
+  if(track && stripWrap){
+    const tRect = track.getBoundingClientRect();
+    const wRect = stripWrap.getBoundingClientRect();
+    offsetLeft = Math.round(wRect.left - tRect.left) + 4;
+  }
+  inner.style.left = offsetLeft + 'px';
   inner.style.transform = `translateX(${-strip.scrollLeft}px)`;
 }
 
@@ -2262,7 +2325,7 @@ function stop(){
 // 指Nタップ (短時間+小移動でリリース): 2=Undo, 3=Redo
 // ============================================================
 
-const pointers = new Map(); // pointerId -> {x, y, type, startX, startY, startT}
+// ペン/マウス描画用（touch はステージレベルで処理）
 let drawing = false;
 let drawingPointerId = null;
 let lastX = 0, lastY = 0;
@@ -2270,34 +2333,113 @@ let lastX = 0, lastY = 0;
 let strokeBuffer = [];
 const SMOOTH_WINDOW = 4;
 
-let pinching = false;
-let pinchStartDist = 0;
-let pinchStartZoom = 1;
-let pinchStartCenter = {x:0, y:0};
-let pinchStartPan = {x:0, y:0};
+// ============================================================
+// STAGE-LEVEL TOUCH GESTURES
+// 全タッチ操作（ピンチズーム・パン・2/3本指タップ・指描画）を
+// stage でまとめて処理することで、キャンバス外からのピンチも動作する
+// ============================================================
+const touchPtrs = new Map(); // pointerId -> {x,y,startX,startY,startT}
+let tPinching = false;
+let tPinchStartDist = 0, tPinchStartZoom = 1;
+let tPinchStartCenter = {x:0,y:0}, tPinchStartPan = {x:0,y:0};
+let tPanning = false, tPanId = null;
+let tPanStartClient = {x:0,y:0}, tPanStartPan = {x:0,y:0};
+let tTapSessionStart = 0, tTapMaxFingers = 0;
 
-// 1本指パン用
-let panning = false;
-let panPointerId = null;
-let panStartClient = {x:0, y:0};
-let panStartPan = {x:0, y:0};
+stage.addEventListener('pointerdown', e => {
+  if(e.pointerType !== 'touch') return;
+  e.preventDefault();
+  stage.setPointerCapture(e.pointerId);
+  const now = performance.now();
+  touchPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY,
+    startX:e.clientX, startY:e.clientY, startT:now});
 
-// タップジェスチャー用
-const TAP_TIME_MS = 300;
-const TAP_MOVE_PX = 12;
-// 直近のタッチダウンの数とタイミング（同時に多本指タップを検出するため）
-let multiTouchActiveCount = 0;     // 現在指がN本以上下りた最大値
-let touchSessionStart = 0;          // 最初の指が下りた時刻
-let touchSessionStartIds = [];      // 関与した指IDs（最大本数記録用）
-let touchSessionMaxFingers = 0;     // セッション中に観測された最大本数
+  // タップセッション追跡
+  if(touchPtrs.size === 1){ tTapSessionStart = now; tTapMaxFingers = 1; }
+  else if(touchPtrs.size > tTapMaxFingers){ tTapMaxFingers = touchPtrs.size; }
 
-function dist(p1, p2){
-  const dx = p1.x - p2.x, dy = p1.y - p2.y;
-  return Math.sqrt(dx*dx + dy*dy);
+  if(touchPtrs.size === 1){
+    if(state.tool === 'fill'){
+      const {x, y} = toCanvasCoord(e.clientX, e.clientY);
+      floodFill(x, y, state.fillColor);
+      pushHistory();
+    } else if(state.tool === 'erase'){
+      drawingPointerId = e.pointerId;
+      startStroke(e.clientX, e.clientY);
+    } else {
+      // ペンツール: 指=パン
+      tPanning = true; tPanId = e.pointerId;
+      tPanStartClient = {x:e.clientX, y:e.clientY};
+      tPanStartPan = {x:state.panX, y:state.panY};
+    }
+  } else if(touchPtrs.size === 2){
+    // 2本指: ピンチ開始
+    if(drawing) endStroke();
+    tPanning = false;
+    tPinching = true;
+    const pts = Array.from(touchPtrs.values());
+    tPinchStartDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    tPinchStartCenter = {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    tPinchStartZoom = state.zoom;
+    tPinchStartPan = {x:state.panX, y:state.panY};
+  } else {
+    // 3本以上: 全動作停止（タップ判定は継続）
+    if(drawing) endStroke();
+    tPinching = false; tPanning = false;
+  }
+}, {passive:false});
+
+stage.addEventListener('pointermove', e => {
+  if(e.pointerType !== 'touch') return;
+  const p = touchPtrs.get(e.pointerId);
+  if(!p) return;
+  p.x = e.clientX; p.y = e.clientY;
+
+  if(tPinching && touchPtrs.size >= 2){
+    const pts = Array.from(touchPtrs.values());
+    const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    const c = {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    if(tPinchStartDist > 0){
+      const scale = d / tPinchStartDist;
+      state.zoom = Math.max(0.05, Math.min(8, tPinchStartZoom * scale));
+      state.panX = tPinchStartPan.x + (c.x - tPinchStartCenter.x);
+      state.panY = tPinchStartPan.y + (c.y - tPinchStartCenter.y);
+      state.fitMode = false;
+      applyZoom();
+    }
+  } else if(tPanning && e.pointerId === tPanId){
+    state.panX = tPanStartPan.x + (e.clientX - tPanStartClient.x);
+    state.panY = tPanStartPan.y + (e.clientY - tPanStartClient.y);
+    state.fitMode = false;
+    applyZoom();
+  } else if(drawing && e.pointerId === drawingPointerId){
+    continueStroke(e.clientX, e.clientY);
+  }
+});
+
+function stageTouchEnd(e){
+  if(e.pointerType !== 'touch') return;
+  const p = touchPtrs.get(e.pointerId);
+  if(!p) return;
+  touchPtrs.delete(e.pointerId);
+
+  if(tPinching && touchPtrs.size < 2) tPinching = false;
+  if(tPanning && e.pointerId === tPanId) tPanning = false;
+  if(drawing && e.pointerId === drawingPointerId) endStroke();
+
+  // 全指が離れたらタップ判定
+  if(touchPtrs.size === 0){
+    const elapsed = performance.now() - tTapSessionStart;
+    const moved = Math.hypot(p.x - p.startX, p.y - p.startY);
+    if(elapsed < 300 && moved < 12){
+      if(tTapMaxFingers === 2){ undo(); }
+      else if(tTapMaxFingers === 3){ redo(); }
+    }
+    tTapMaxFingers = 0;
+  }
 }
-function center(p1, p2){
-  return { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
-}
+stage.addEventListener('pointerup', stageTouchEnd);
+stage.addEventListener('pointercancel', stageTouchEnd);
 
 function smoothPoint(x, y){
   strokeBuffer.push({x, y});
@@ -2344,199 +2486,42 @@ function endStroke(){
   pushHistory();
 }
 
-function startPinch(){
-  if(drawing) endStroke();
-  if(panning) endPan();
-  const pts = Array.from(pointers.values());
-  if(pts.length < 2) return;
-  pinching = true;
-  pinchStartDist = dist(pts[0], pts[1]);
-  pinchStartCenter = center(pts[0], pts[1]);
-  pinchStartZoom = state.zoom;
-  pinchStartPan = { x: state.panX, y: state.panY };
-}
-function updatePinch(){
-  const pts = Array.from(pointers.values());
-  if(pts.length < 2) return;
-  const newDist = dist(pts[0], pts[1]);
-  const newCenter = center(pts[0], pts[1]);
-  if(pinchStartDist <= 0) return;
-  const scale = newDist / pinchStartDist;
-  const newZoom = Math.max(0.05, Math.min(8, pinchStartZoom * scale));
-  const dx = newCenter.x - pinchStartCenter.x;
-  const dy = newCenter.y - pinchStartCenter.y;
-  state.zoom = newZoom;
-  state.fitMode = false;
-  state.panX = pinchStartPan.x + dx;
-  state.panY = pinchStartPan.y + dy;
-  applyZoom();
-}
-function endPinch(){
-  pinching = false;
-}
+// startPinch/endPinch/startPan/endPan は stage-level touch handler に統合済み
 
-function startPan(pointerId, clientX, clientY){
-  panning = true;
-  panPointerId = pointerId;
-  panStartClient = { x: clientX, y: clientY };
-  panStartPan = { x: state.panX, y: state.panY };
-}
-function updatePan(clientX, clientY){
-  if(!panning) return;
-  state.panX = panStartPan.x + (clientX - panStartClient.x);
-  state.panY = panStartPan.y + (clientY - panStartClient.y);
-  state.fitMode = false;
-  applyZoom();
-}
-function endPan(){
-  panning = false;
-  panPointerId = null;
-}
-
-// 指がツールの実行対象になるかを判定
-function isFingerActionable(){
-  // 消しゴム・塗りつぶしツール選択中なら指でも実行可
-  return state.tool === 'erase' || state.tool === 'fill';
-}
-
+// ============================================================
+// DRAW CANVAS — ペン/マウスのみ（タッチはstageレベルで処理）
+// ============================================================
 drawCanvas.addEventListener('pointerdown', e => {
+  if(e.pointerType === 'touch') return; // stage側で処理
   if(e.pointerType === 'mouse' && e.button !== 0) return;
   e.preventDefault();
   drawCanvas.setPointerCapture(e.pointerId);
-  const now = performance.now();
-  pointers.set(e.pointerId, {
-    x: e.clientX, y: e.clientY, type: e.pointerType,
-    startX: e.clientX, startY: e.clientY, startT: now,
-  });
-
-  // タッチセッション管理（タップ検出用）
-  if(e.pointerType === 'touch'){
-    // タッチ本数のセッション開始/拡張
-    if(pointers.size === 1 && (countTouches() === 1)){
-      touchSessionStart = now;
-      touchSessionMaxFingers = 1;
-      touchSessionStartIds = [e.pointerId];
-    } else {
-      const touches = countTouches();
-      if(touches > touchSessionMaxFingers) touchSessionMaxFingers = touches;
-      touchSessionStartIds.push(e.pointerId);
-    }
-  }
-
-  // === ジェスチャールーティング ===
-  if(e.pointerType === 'pen' || e.pointerType === 'mouse'){
-    // ペン/マウスは常に描画
-    drawingPointerId = e.pointerId;
-    if(state.tool === 'fill'){
-      const {x, y} = toCanvasCoord(e.clientX, e.clientY);
-      floodFill(x, y, state.fillColor);
-      pushHistory();
-    } else {
-      startStroke(e.clientX, e.clientY);
-    }
-    return;
-  }
-
-  // タッチ
-  const touches = countTouches();
-  if(touches === 1){
-    // 1本目: ツールに応じて挙動分岐
-    if(state.tool === 'fill'){
-      const {x, y} = toCanvasCoord(e.clientX, e.clientY);
-      floodFill(x, y, state.fillColor);
-      pushHistory();
-      // 塗りつぶしの後はタップでもジェスチャーを動かさない（既に効果が出てるので）
-    } else if(state.tool === 'erase'){
-      drawingPointerId = e.pointerId;
-      startStroke(e.clientX, e.clientY);
-    } else {
-      // pen ツールでは指=パン候補（タップでなければパンに移行）
-      startPan(e.pointerId, e.clientX, e.clientY);
-    }
-  } else if(touches === 2){
-    // 2本指: ピンチに切り替え（描画もパンも止める）
-    if(drawing) endStroke();
-    if(panning) endPan();
-    startPinch();
-  } else if(touches >= 3){
-    // 3本以上: ピンチ解除（タップ判定だけ残す）
-    if(pinching) endPinch();
-    if(drawing) endStroke();
-    if(panning) endPan();
+  drawingPointerId = e.pointerId;
+  if(state.tool === 'fill'){
+    const {x, y} = toCanvasCoord(e.clientX, e.clientY);
+    floodFill(x, y, state.fillColor);
+    pushHistory();
+  } else {
+    startStroke(e.clientX, e.clientY);
   }
 });
 
-function countTouches(){
-  let n = 0;
-  for(const p of pointers.values()) if(p.type === 'touch') n++;
-  return n;
-}
-
 drawCanvas.addEventListener('pointermove', e => {
+  if(e.pointerType === 'touch') return;
   const {x, y} = toCanvasCoord(e.clientX, e.clientY);
   document.getElementById('hud-coord').textContent = `${x} · ${y}`;
-
-  if(!pointers.has(e.pointerId)) return;
-  e.preventDefault();
-  const p = pointers.get(e.pointerId);
-  p.x = e.clientX; p.y = e.clientY;
-
-  if(pinching){
-    updatePinch();
-    return;
-  }
-  if(panning && e.pointerId === panPointerId){
-    updatePan(e.clientX, e.clientY);
-    return;
-  }
   if(drawing && e.pointerId === drawingPointerId){
+    e.preventDefault();
     continueStroke(e.clientX, e.clientY);
   }
 });
 
-function onPointerEnd(e){
-  if(!pointers.has(e.pointerId)) return;
-  const p = pointers.get(e.pointerId);
-  pointers.delete(e.pointerId);
-
-  // タッチ系はタップ検出のため、セッション最終判定をする
-  const wasTouch = p.type === 'touch';
-  const remainingTouches = countTouches();
-
-  if(pinching){
-    if(remainingTouches < 2){
-      endPinch();
-    }
-    // 続きで残った指を描画/パンに昇格はしない（混乱防止）
-  } else if(panning && e.pointerId === panPointerId){
-    endPan();
-  } else if(drawing && e.pointerId === drawingPointerId){
-    endStroke();
-  }
-
-  // タップジェスチャー判定: タッチ系で全指が離れたタイミングで判定
-  if(wasTouch && remainingTouches === 0){
-    const elapsed = performance.now() - touchSessionStart;
-    // セッション内最大指数で判定
-    const fingers = touchSessionMaxFingers;
-    // 移動量: 最初の指の startX/Y と最後の x/y で判定（簡易）
-    const moved = Math.hypot(p.x - p.startX, p.y - p.startY);
-    if(elapsed < TAP_TIME_MS && moved < TAP_MOVE_PX){
-      // タップとして処理
-      if(fingers === 2){
-        undo();
-      } else if(fingers === 3){
-        redo();
-      }
-      // 1本タップは現状割り当てなし（将来カスタマイズ）
-    }
-    // セッションリセット
-    touchSessionMaxFingers = 0;
-    touchSessionStartIds = [];
-  }
+function onPenEnd(e){
+  if(e.pointerType === 'touch') return;
+  if(drawing && e.pointerId === drawingPointerId) endStroke();
 }
-drawCanvas.addEventListener('pointerup', onPointerEnd);
-drawCanvas.addEventListener('pointercancel', onPointerEnd);
+drawCanvas.addEventListener('pointerup', onPenEnd);
+drawCanvas.addEventListener('pointercancel', onPenEnd);
 
 drawCanvas.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -3216,8 +3201,7 @@ document.getElementById('btn-flip').addEventListener('click', e => {
 document.getElementById('btn-mirror').addEventListener('click', e => {
   state.mirrorOn = !state.mirrorOn;
   e.target.classList.toggle('on', state.mirrorOn);
-  const guide = document.getElementById('mirror-guide');
-  if(guide) guide.style.display = state.mirrorOn ? 'block' : 'none';
+  updateMirrorGuide();
 });
 document.getElementById('btn-add-frame').addEventListener('click', () => addFrame(false));
 document.getElementById('btn-dup-frame').addEventListener('click', () => addFrame(true));
@@ -3248,43 +3232,39 @@ document.getElementById('frame-strip').addEventListener('wheel', e => {
 }, { passive: false, capture: true });
 
 // ============================================================
-// タイムライン領域での 2本指/3本指タップ → Undo/Redo
-// （描画キャンバスとは独立した検出。ストリップのスクロールを邪魔しない）
-// ============================================================
+// タイムライン領域 2/3本指タップ → Undo/Redo（strip-area独立検出）
+// stage と別要素なので個別にトラッキング
 (function setupStripTapGestures(){
   const stripArea = document.getElementById('strip-area');
   if(!stripArea) return;
-  const tps = new Map(); // pointerId -> {x,y,startX,startY,startT}
-  let sessStart = 0;
-  let sessMaxFingers = 0;
-  const TT = 300, TM = 12;
+  const tps = new Map();
+  let sessStart = 0, sessMax = 0;
   stripArea.addEventListener('pointerdown', e => {
     if(e.pointerType !== 'touch') return;
     const now = performance.now();
-    if(tps.size === 0){ sessStart = now; sessMaxFingers = 0; }
-    tps.set(e.pointerId, { x:e.clientX, y:e.clientY, startX:e.clientX, startY:e.clientY, startT:now });
-    if(tps.size > sessMaxFingers) sessMaxFingers = tps.size;
-  });
+    if(tps.size === 0){ sessStart = now; sessMax = 0; }
+    tps.set(e.pointerId, {x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY});
+    if(tps.size > sessMax) sessMax = tps.size;
+  }, {passive:true});
   stripArea.addEventListener('pointermove', e => {
     const p = tps.get(e.pointerId);
     if(p){ p.x = e.clientX; p.y = e.clientY; }
-  });
+  }, {passive:true});
   function end(e){
-    const p = tps.get(e.pointerId);
-    if(!p) return;
+    const p = tps.get(e.pointerId); if(!p) return;
     tps.delete(e.pointerId);
     if(tps.size === 0){
       const elapsed = performance.now() - sessStart;
-      const moved = Math.hypot(p.x - p.startX, p.y - p.startY);
-      if(elapsed < TT && moved < TM){
-        if(sessMaxFingers === 2){ undo(); }
-        else if(sessMaxFingers === 3){ redo(); }
+      const moved = Math.hypot(p.x - p.sx, p.y - p.sy);
+      if(elapsed < 300 && moved < 12){
+        if(sessMax === 2) undo();
+        else if(sessMax === 3) redo();
       }
-      sessMaxFingers = 0;
+      sessMax = 0;
     }
   }
-  stripArea.addEventListener('pointerup', end);
-  stripArea.addEventListener('pointercancel', end);
+  stripArea.addEventListener('pointerup', end, {passive:true});
+  stripArea.addEventListener('pointercancel', end, {passive:true});
 })();
 
 // ============================================================

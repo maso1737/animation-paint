@@ -165,6 +165,17 @@ html,body{
   gap:6px;padding:6px 0;
   width:44px;
 }
+.tb-undoredo{
+  width:38px;height:34px;
+  background:transparent;border:1px solid var(--border);
+  color:rgba(255,255,255,0.55);
+  font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.12s;
+  border-radius:2px;
+}
+.tb-undoredo:hover{border-color:var(--border-bright);color:var(--acid);}
+.tb-undoredo:active{background:rgba(54,255,0,0.1);}
 .tb-bg .lbl{
   font-size:8px;letter-spacing:0.15em;
   color:rgba(54,255,0,0.5);
@@ -737,6 +748,36 @@ input[type=range]::-moz-range-thumb{
 }
 .fc.active .fc-dur{color:var(--neon);}
 
+/* 非表示トグルボタン */
+.fc-vis-btn{
+  position:absolute;
+  top:3px;right:16px;
+  width:13px;height:13px;
+  background:rgba(0,0,0,0.65);
+  border:1px solid rgba(255,255,255,0.22);
+  border-radius:2px;
+  font-size:7px;line-height:13px;
+  text-align:center;cursor:pointer;
+  color:rgba(255,255,255,0.65);
+  z-index:4;padding:0;
+  display:none;
+  touch-action:none;
+}
+.fc:hover .fc-vis-btn,.fc-vis-btn.off{display:block;}
+.fc-vis-btn.off{
+  color:rgba(255,80,80,0.9);
+  border-color:rgba(255,80,80,0.5);
+  background:rgba(60,0,0,0.65);
+}
+/* 非表示フレームのオーバーレイ */
+.fc.fc-frame-hidden::after{
+  content:'';
+  position:absolute;inset:0;
+  background:rgba(0,0,0,0.55);
+  pointer-events:none;
+  z-index:3;
+}
+
 /* "+" 追加ボタン */
 .fc-add{
   flex-shrink:0;width:40px;
@@ -846,7 +887,6 @@ input[type=range]::-moz-range-thumb{
     <div class="right">
       <button id="btn-flip" title="キャンバス左右反転（表示のみ）">FLIP</button>
       <button id="btn-mirror" title="左右ミラー描画">MIRROR</button>
-      <button id="btn-clear">CLEAR</button>
       <button id="btn-export">EXPORT 4K</button>
     </div>
   </div>
@@ -913,6 +953,12 @@ input[type=range]::-moz-range-thumb{
       </div>
       <span class="val" id="tb-bg-val">100</span>
     </div>
+
+    <div class="tool-sep"></div>
+
+    <!-- UNDO / REDO (iPadタイムライン用) -->
+    <button class="tb-undoredo" id="tb-undo" title="Undo (Ctrl+Z)">↩</button>
+    <button class="tb-undoredo" id="tb-redo" title="Redo (Ctrl+Y)">↪</button>
   </div>
 
   <!-- STAGE -->
@@ -972,6 +1018,7 @@ input[type=range]::-moz-range-thumb{
       <span class="frame-pos" id="dur-info">001コマ / 0.04s</span>
       <div class="right">
         <button id="btn-onion" title="オニオンスキン (O)">ONION</button>
+        <button id="btn-split-frame" title="現在フレームを2分割">SPLIT</button>
         <button id="btn-add-frame" title="新規フレーム (N)">+ FRAME</button>
         <button id="btn-dup-frame" title="複製 (D)">DUPLICATE</button>
         <button id="btn-del-frame" title="削除 (Del)">DELETE</button>
@@ -1160,6 +1207,8 @@ const state = {
   mirrorOn: false,
   // ミラー軸 (x座標, キャンバス座標系)。デフォルトは中央。
   mirrorAxisX: 1024,
+  // TIME表示単位: 'frames'=コマ数, 'seconds'=秒
+  timeUnit: 'frames',
 };
 
 // ツール現在サイズ取得（ツールに応じて切替）
@@ -1505,6 +1554,7 @@ function createBlankFrame(){
     histIdx: -1,
     strokeCount: 0,
     dirty: true,
+    hidden: false,  // 非表示フラグ
   };
 }
 
@@ -1759,6 +1809,21 @@ function buildStrip(){
       thumb.className = 'fc-thumb';
       thumb.appendChild(f.thumbCanvas);
       cell.appendChild(thumb);
+
+      // 表示/非表示トグルボタン
+      const visBtn = document.createElement('button');
+      visBtn.className = 'fc-vis-btn' + (f.hidden ? ' off' : '');
+      visBtn.title = f.hidden ? '非表示（タップで表示）' : '表示（タップで非表示）';
+      visBtn.textContent = f.hidden ? '✕' : '●';
+      visBtn.addEventListener('pointerdown', e => e.stopPropagation());
+      visBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        f.hidden = !f.hidden;
+        markFrameDirty(f);
+        buildStrip();
+      });
+      cell.appendChild(visBtn);
+      if(f.hidden) cell.classList.add('fc-frame-hidden');
 
       // 内側仕切り線（duration 2,3用）
       if(f.duration >= 2 && f.duration <= 3){
@@ -2096,9 +2161,13 @@ function ticksToMs(ticks){
 function updateDurInfo(){
   const total = totalTicks();
   const totalSec = (total / state.fps).toFixed(2);
-  // TIME: 全体コマ数 / 全体秒数
-  document.getElementById('dur-info').textContent =
-    `${String(total).padStart(3,'0')}コマ / ${totalSec}s`;
+  if(state.timeUnit === 'frames'){
+    document.getElementById('dur-info').textContent =
+      `${String(total).padStart(3,'0')} コマ`;
+  } else {
+    document.getElementById('dur-info').textContent =
+      `${totalSec} s`;
+  }
 }
 
 function scrollFrameIntoView(idx){
@@ -2129,10 +2198,10 @@ function updateTimeTrack(){
     const tick = document.createElement('div');
     tick.className = 'time-tick';
     if(t % fps === 0){
-      // 秒
       tick.classList.add('major');
-      const sec = Math.floor(t / fps);
-      tick.textContent = sec + 's';
+      tick.textContent = state.timeUnit === 'frames'
+        ? t + 'f'
+        : Math.floor(t / fps) + 's';
     } else if(t % (fps / 2) === 0){
       // 0.5秒
       tick.classList.add('tick-sec');
@@ -2186,11 +2255,11 @@ function updateOnion(){
     onionNextCtx.clearRect(0,0,CFG.WORK_W,CFG.WORK_H);
     return;
   }
-  // 前: drawフレームのみを探す（空ブロックは飛ばす）
+  // 前: drawフレームのみを探す（空ブロック・非表示は飛ばす）
   onionPrevCtx.clearRect(0,0,CFG.WORK_W,CFG.WORK_H);
   let prevDraw = null;
   for(let i = state.currentFrame - 1; i >= 0; i--){
-    if(state.frames[i].kind === 'draw'){ prevDraw = state.frames[i]; break; }
+    if(state.frames[i].kind === 'draw' && !state.frames[i].hidden){ prevDraw = state.frames[i]; break; }
   }
   if(prevDraw){
     const img = new ImageData(
@@ -2199,11 +2268,11 @@ function updateOnion(){
     );
     onionPrevCtx.putImageData(img, 0, 0);
   }
-  // 後: drawフレームのみを探す
+  // 後: drawフレームのみを探す（非表示は飛ばす）
   onionNextCtx.clearRect(0,0,CFG.WORK_W,CFG.WORK_H);
   let nextDraw = null;
   for(let i = state.currentFrame + 1; i < state.frames.length; i++){
-    if(state.frames[i].kind === 'draw'){ nextDraw = state.frames[i]; break; }
+    if(state.frames[i].kind === 'draw' && !state.frames[i].hidden){ nextDraw = state.frames[i]; break; }
   }
   if(nextDraw){
     const img = new ImageData(
@@ -2256,10 +2325,10 @@ function play(){
     let lastDrawIdx = -1;
     for(let i = 0; i < state.frames.length; i++){
       const f = state.frames[i];
-      if(f.kind === 'draw') lastDrawIdx = i;
+      if(f.kind === 'draw' && !f.hidden) lastDrawIdx = i;
       acc += f.duration;
       if(tick < acc){
-        return { idx: i, showIdx: f.kind === 'draw' ? i : lastDrawIdx };
+        return { idx: i, showIdx: (f.kind === 'draw' && !f.hidden) ? i : lastDrawIdx };
       }
     }
     return { idx: state.frames.length - 1, showIdx: lastDrawIdx };
@@ -2635,24 +2704,52 @@ bgTrack.addEventListener('pointermove', e => {
 // 初期表示
 setBgBright(100);
 
-// クリア
-document.getElementById('btn-clear').addEventListener('click', () => {
+// クリア関数
+function clearCanvas(){
   drawCtx.clearRect(0, 0, CFG.WORK_W, CFG.WORK_H);
   pushHistory();
-});
+}
+// ERASEボタンのダブルクリック/ダブルタップでキャンバスをクリア
+(function(){
+  let lastEraseTap = 0;
+  const eraseBtn = document.querySelector('[data-tool="erase"]');
+  eraseBtn.addEventListener('click', () => {
+    const now = performance.now();
+    if(now - lastEraseTap < 380){
+      clearCanvas();
+      lastEraseTap = 0;
+    } else {
+      lastEraseTap = now;
+    }
+  });
+})();
 
 // ============================================================
 // ZOOM CONTROLS
 // ============================================================
+// 最後にポインターが触れた画面座標を追跡（ズームボタンの焦点用）
+let lastPointerClientX = 0, lastPointerClientY = 0;
+stage.addEventListener('pointermove', e => {
+  lastPointerClientX = e.clientX;
+  lastPointerClientY = e.clientY;
+}, { passive: true });
+
+function getZoomFocal(){
+  // 有効な座標があればそれを使う。なければstageの中心
+  if(lastPointerClientX > 0 || lastPointerClientY > 0){
+    return { x: lastPointerClientX, y: lastPointerClientY };
+  }
+  const r = stage.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
 document.getElementById('zoom-in').addEventListener('click', () => {
-  state.zoom = Math.min(8, state.zoom * 1.25);
-  state.fitMode = false;
-  applyZoom();
+  const { x, y } = getZoomFocal();
+  zoomAt(x, y, state.zoom * 1.25);
 });
 document.getElementById('zoom-out').addEventListener('click', () => {
-  state.zoom = Math.max(0.1, state.zoom / 1.25);
-  state.fitMode = false;
-  applyZoom();
+  const { x, y } = getZoomFocal();
+  zoomAt(x, y, state.zoom / 1.25);
 });
 document.getElementById('zoom-fit').addEventListener('click', fitToStage);
 
@@ -3069,6 +3166,38 @@ function setupWorkArea(){
   body.addEventListener('pointerup', endBodyDrag);
   body.addEventListener('pointercancel', endBodyDrag);
 
+  // ============================================================
+  // ペンスクラブで time-track 全体をタイムライン拡縮
+  // (Alt+ホイール相当。タッチは従来の再生範囲操作)
+  // ============================================================
+  const timeTrack = document.getElementById('time-track');
+  let penScaleDrag = null;
+  timeTrack.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+    // work-handle や work-area-body への操作は優先させる（stopPropagation済み）
+    penScaleDrag = {
+      startX: e.clientX,
+      origBaseW: state.cellBaseW,
+      origStretch: state.cellStretchPerTick,
+    };
+    timeTrack.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }, {passive:false});
+  timeTrack.addEventListener('pointermove', e => {
+    if(!penScaleDrag) return;
+    const dx = e.clientX - penScaleDrag.startX;
+    const factor = 1 + dx * 0.008; // 右へ = 拡大
+    state.cellBaseW = Math.max(40, Math.min(240, Math.round(penScaleDrag.origBaseW * factor)));
+    state.cellStretchPerTick = Math.max(8, Math.min(60, Math.round(penScaleDrag.origStretch * factor)));
+    buildStrip();
+    updateTimeTrack();
+  });
+  function endPenScale(){
+    penScaleDrag = null;
+  }
+  timeTrack.addEventListener('pointerup', endPenScale);
+  timeTrack.addEventListener('pointercancel', endPenScale);
+
   // ダブルタップで全範囲/最小範囲をサイクル
   let lastTapT = 0;
   let cycleState = 0; // 0=全範囲, 1=現在フレームのみ, 2=元の状態（保存値）
@@ -3180,6 +3309,53 @@ document.getElementById('btn-play').addEventListener('click', () => {
   if(state.playing) stop(); else play();
 });
 document.getElementById('btn-stop').addEventListener('click', stop);
+// ============================================================
+// IN/OUT スクラブ: ラベル上を横ドラッグで現在フレームの duration を変更
+// ============================================================
+(function setupInOutScrub(){
+  function makeScrubHandler(el){
+    let scrub = null;
+    el.style.cursor = 'ew-resize';
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const f = state.frames[state.currentFrame];
+      if(!f || f.kind === 'empty') return;
+      scrub = { startX: e.clientX, origDur: f.duration };
+    });
+    el.addEventListener('pointermove', e => {
+      if(!scrub) return;
+      const f = state.frames[state.currentFrame];
+      if(!f) return;
+      const dx = e.clientX - scrub.startX;
+      let newDur = scrub.origDur + Math.round(dx / state.cellStretchPerTick);
+      const otherTicks = totalTicks() - f.duration;
+      const maxDur = Math.min(120, maxTicks() - otherTicks);
+      newDur = Math.max(1, Math.min(maxDur, newDur));
+      if(newDur !== f.duration){
+        f.duration = newDur;
+        enforceMaxDuration();
+        markFrameDirty(f);
+        buildStrip();
+        updateFramePos();
+        updateDurInfo();
+        updateTimeTrack();
+      }
+    });
+    function endScrub(){
+      if(!scrub) return;
+      scrub = null;
+      markMetaDirty();
+    }
+    el.addEventListener('pointerup', endScrub);
+    el.addEventListener('pointercancel', endScrub);
+  }
+  const inEl  = document.getElementById('frame-in');
+  const outEl = document.getElementById('frame-pos');
+  if(inEl)  makeScrubHandler(inEl);
+  if(outEl) makeScrubHandler(outEl);
+})();
+
 document.getElementById('fps-input').addEventListener('change', e => {
   const v = Math.max(1, Math.min(60, parseInt(e.target.value) || 24));
   state.fps = v;
@@ -3193,6 +3369,17 @@ document.getElementById('btn-onion').addEventListener('click', e => {
   updateOnion();
 });
 // LOOPボタンは廃止（常時LOOP）
+document.getElementById('tb-undo').addEventListener('click', () => undo());
+document.getElementById('tb-redo').addEventListener('click', () => redo());
+
+// TIME表示 タップで コマ ↔ 秒 切替
+document.getElementById('dur-info').addEventListener('click', () => {
+  state.timeUnit = state.timeUnit === 'frames' ? 'seconds' : 'frames';
+  updateDurInfo();
+  updateTimeTrack(); // ルーラーのラベルも同期
+});
+document.getElementById('dur-info').style.cursor = 'pointer';
+
 document.getElementById('btn-flip').addEventListener('click', e => {
   state.flipped = !state.flipped;
   e.target.classList.toggle('on', state.flipped);
@@ -3206,6 +3393,34 @@ document.getElementById('btn-mirror').addEventListener('click', e => {
 document.getElementById('btn-add-frame').addEventListener('click', () => addFrame(false));
 document.getElementById('btn-dup-frame').addEventListener('click', () => addFrame(true));
 document.getElementById('btn-del-frame').addEventListener('click', deleteCurrentFrame);
+
+// フレーム分割（現在フレームを前半/後半2コマに分割）
+function splitCurrentFrame(){
+  const f = curFrame();
+  if(!f || f.kind !== 'draw' || f.duration < 2) return;
+  syncFrameFromCanvas(f);
+  const d1 = Math.floor(f.duration / 2);
+  const d2 = f.duration - d1;
+  // 現フレームを前半コマ数に縮める
+  f.duration = d1;
+  markFrameDirty(f);
+  // 後半コマを同内容の新フレームとして直後に挿入
+  const newF = createBlankFrame();
+  newF.drawData = new Uint8ClampedArray(f.drawData);
+  const tc = newF.thumbCanvas.getContext('2d');
+  tc.drawImage(f.thumbCanvas, 0, 0);
+  newF.duration = d2;
+  state.frames.splice(state.currentFrame + 1, 0, newF);
+  newF.dirty = true;
+  state.pendingSaveFrames.add(newF.id);
+  enforceMaxDuration();
+  buildStrip();
+  updateDurInfo();
+  updateTimeTrack();
+  scrollFrameIntoView(state.currentFrame);
+  scheduleSave();
+}
+document.getElementById('btn-split-frame').addEventListener('click', splitCurrentFrame);
 document.getElementById('strip-prev').addEventListener('click', () => {
   if(state.currentFrame > 0){
     switchToFrame(state.currentFrame - 1);

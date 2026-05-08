@@ -1209,6 +1209,8 @@ const state = {
   mirrorAxisX: 1024,
   // TIME表示単位: 'frames'=コマ数, 'seconds'=秒
   timeUnit: 'frames',
+  // 直前の操作種別: 'canvas' | 'timeline' → undo/redo のターゲット切替に使用
+  lastEditWas: 'canvas',
 };
 
 // ツール現在サイズ取得（ツールに応じて切替）
@@ -1504,24 +1506,110 @@ function pushHistory(){
   syncFrameFromCanvas(f);
   updateStats();
   markFrameDirty(f);
+  state.lastEditWas = 'canvas'; // キャンバス操作を記録
 }
+
+// ============================================================
+// TIMELINE UNDO/REDO
+// ============================================================
+const tlHistory = [];   // タイムライン操作履歴
+let tlHistIdx = -1;     // 現在位置
+const TL_HIST_MAX = 20;
+
+// 現在のタイムライン状態をスナップショット（drawDataはref、historyはshallow copy）
+function snapshotTL(){
+  return state.frames.map(f => {
+    const s = {
+      id: f.id, kind: f.kind, duration: f.duration, hidden: !!f.hidden,
+    };
+    if(f.kind === 'draw'){
+      s.drawData    = f.drawData;          // syncFrameFromCanvas が新Array割当するので参照で安全
+      s.thumbCanvas = f.thumbCanvas;
+      s.history     = (f.history || []).slice(); // shallow copy（各snap自体は不変）
+      s.histIdx     = f.histIdx;
+      s.strokeCount = f.strokeCount || 0;
+    }
+    return s;
+  });
+}
+
+// タイムライン操作後に呼ぶ（AFTER変更）
+function pushTimelineHistory(){
+  if(tlHistIdx < tlHistory.length - 1) tlHistory.splice(tlHistIdx + 1);
+  tlHistory.push(snapshotTL());
+  if(tlHistory.length > TL_HIST_MAX) tlHistory.shift();
+  tlHistIdx = tlHistory.length - 1;
+  state.lastEditWas = 'timeline';
+}
+
+function restoreTL(snap){
+  state.frames = snap.map(s => {
+    if(s.kind === 'empty'){
+      return { id: s.id, kind: 'empty', duration: s.duration, dirty: true };
+    }
+    return {
+      id: s.id, kind: 'draw',
+      duration: s.duration, hidden: s.hidden,
+      drawData: s.drawData, thumbCanvas: s.thumbCanvas,
+      history: (s.history || []).slice(), histIdx: s.histIdx,
+      strokeCount: s.strokeCount || 0, dirty: true,
+    };
+  });
+  state.currentFrame = Math.min(state.currentFrame, Math.max(0, state.frames.length - 1));
+  const cf = state.frames[state.currentFrame];
+  if(cf) loadFrameToCanvas(cf);
+  ensureWorkAreaValid();
+  buildStrip();
+  updateStripUI();
+  updateFramePos();
+  updateDurInfo();
+  updateTimeTrack();
+  updateOnion();
+  scheduleSave();
+}
+
+function undoTimeline(){
+  if(tlHistIdx <= 0) return;
+  tlHistIdx--;
+  restoreTL(tlHistory[tlHistIdx]);
+}
+function redoTimeline(){
+  if(tlHistIdx >= tlHistory.length - 1) return;
+  tlHistIdx++;
+  restoreTL(tlHistory[tlHistIdx]);
+}
+
 function undo(){
-  const f = curDrawFrame(); if(!f) return;
-  if(f.histIdx <= 0) return;
-  f.histIdx--;
-  restoreSnap(f.history[f.histIdx]);
-  syncFrameFromCanvas(f);
-  updateStats();
-  markFrameDirty(f);
+  if(state.lastEditWas === 'timeline'){
+    undoTimeline();
+  } else {
+    const f = curDrawFrame();
+    if(f && f.histIdx > 0){
+      f.histIdx--;
+      restoreSnap(f.history[f.histIdx]);
+      syncFrameFromCanvas(f);
+      updateStats();
+      markFrameDirty(f);
+    } else {
+      undoTimeline(); // キャンバス履歴がなければタイムライン
+    }
+  }
 }
 function redo(){
-  const f = curDrawFrame(); if(!f) return;
-  if(f.histIdx >= f.history.length - 1) return;
-  f.histIdx++;
-  restoreSnap(f.history[f.histIdx]);
-  syncFrameFromCanvas(f);
-  updateStats();
-  markFrameDirty(f);
+  if(state.lastEditWas === 'timeline'){
+    redoTimeline();
+  } else {
+    const f = curDrawFrame();
+    if(f && f.histIdx < (f.history?.length || 0) - 1){
+      f.histIdx++;
+      restoreSnap(f.history[f.histIdx]);
+      syncFrameFromCanvas(f);
+      updateStats();
+      markFrameDirty(f);
+    } else {
+      redoTimeline(); // キャンバス履歴がなければタイムライン
+    }
+  }
 }
 function updateStats(){
   const f = curDrawFrame();
@@ -1670,6 +1758,7 @@ function addFrame(copyFromCurrent = false){
   switchToFrame(insertAt);
   scrollFrameIntoView(insertAt);
   scheduleSave();
+  pushTimelineHistory(); // タイムライン操作記録
 }
 
 // 現在フレーム削除
@@ -1725,6 +1814,7 @@ async function deleteCurrentFrame(){
   updateDurInfo();
   updateTimeTrack();
   markMetaDirty();
+  pushTimelineHistory(); // タイムライン操作記録
 }
 
 // セル幅計算
@@ -2071,10 +2161,12 @@ function setupScrubHandle(handle, cell, frame, idx){
   });
   function endScrub(e){
     if(!scrubStart) return;
+    const changed = frame.duration !== scrubStart.origDur;
     scrubStart = null;
     handle.classList.remove('active');
     buildStrip();
     markFrameDirty(frame);
+    if(changed) pushTimelineHistory(); // 変更があった場合のみ記録
     updateDurInfo();
     updateTimeTrack();
   }
@@ -2190,21 +2282,28 @@ function updateTimeTrack(){
 
   const total = totalTicks();
   const fps = state.fps;
-  // 1秒ごとに「秒」目盛、6コマ（4分の1秒）ごとに小目盛
-  const minorEvery = Math.max(1, Math.floor(fps / 4));
-  for(let t = 0; t <= total; t += minorEvery){
-    if(t === 0) continue; // 先頭0sラベルは表示しない
+  // ズームレベルに応じて小目盛間隔を変える（1コマ単位まで対応）
+  const pxPerTick = state.cellStretchPerTick;
+  let minorEvery;
+  if(pxPerTick >= 12)     minorEvery = 1;   // 1コマ単位
+  else if(pxPerTick >= 5) minorEvery = 3;   // 3コマ単位
+  else                    minorEvery = 6;   // 6コマ単位
+  const majorEvery = 12; // kラベルは常に12コマ単位
+
+  for(let t = minorEvery; t <= total; t += minorEvery){
     const x = tickToPx(t);
     const tick = document.createElement('div');
     tick.className = 'time-tick';
-    if(t % fps === 0){
+    if(t % majorEvery === 0){
       tick.classList.add('major');
-      tick.textContent = state.timeUnit === 'frames'
-        ? t + 'f'
-        : Math.floor(t / fps) + 's';
-    } else if(t % (fps / 2) === 0){
-      // 0.5秒
-      tick.classList.add('tick-sec');
+      if(state.timeUnit === 'frames'){
+        tick.textContent = (t / 12) + 'k'; // 12コマ=1k
+      } else {
+        const s = t / fps;
+        tick.textContent = s < 10 ? s.toFixed(1) + 's' : Math.round(s) + 's';
+      }
+    } else if(t % (majorEvery / 2) === 0){
+      tick.classList.add('tick-sec'); // 6コマ境界（半major）
     }
     tick.style.left = x + 'px';
     inner.appendChild(tick);
@@ -2335,6 +2434,8 @@ function play(){
   }
 
   let lastShown = -1;
+  let lastTick  = -1;
+  const playCursor = document.getElementById('timeline-cursor');
   function loop(now){
     if(!state.playing) return;
     const elapsed = now - state.playStartTime;
@@ -2346,6 +2447,13 @@ function play(){
       return;
     }
     const tick = startTick + Math.floor(t / tickMs);
+
+    // カーソルを1コマ単位でリアルタイム更新（毎RAF）
+    if(tick !== lastTick){
+      lastTick = tick;
+      if(playCursor) playCursor.style.left = tickToPx(tick) + 'px';
+    }
+
     const { idx, showIdx } = frameToShowAt(tick);
     if(idx !== lastShown){
       lastShown = idx;
@@ -2366,7 +2474,7 @@ function play(){
       }
       updateStripUI();
       updateFramePos();
-      updateTimeTrack();
+      // updateTimeTrack() は再生中は省略（カーソルは上で個別更新）
     }
     playRAF = requestAnimationFrame(loop);
   }
@@ -3198,6 +3306,24 @@ function setupWorkArea(){
   timeTrack.addEventListener('pointerup', endPenScale);
   timeTrack.addEventListener('pointercancel', endPenScale);
 
+  // time-track 上のダブルクリック/ダブルタップ（work-area以外の空きエリア）→ 全範囲
+  let trackDblT = 0;
+  timeTrack.addEventListener('pointerdown', e => {
+    // work-area内の操作は除外（そちらで個別処理済み）
+    if(e.target.closest('#work-area')) return;
+    const now = performance.now();
+    if(now - trackDblT < 350){
+      state.workStart = 0;
+      state.workEnd = totalTicks();
+      updateTimeTrack();
+      updateDurInfo();
+      markMetaDirty();
+      trackDblT = 0;
+    } else {
+      trackDblT = now;
+    }
+  }, { passive: true });
+
   // ダブルタップで全範囲/最小範囲をサイクル
   let lastTapT = 0;
   let cycleState = 0; // 0=全範囲, 1=現在フレームのみ, 2=元の状態（保存値）
@@ -3310,22 +3436,34 @@ document.getElementById('btn-play').addEventListener('click', () => {
 });
 document.getElementById('btn-stop').addEventListener('click', stop);
 // ============================================================
-// IN/OUT スクラブ: ラベル上を横ドラッグで現在フレームの duration を変更
+// IN/OUT スクラブ
+// IN: 前フレームの duration を変更（IN点を前後に動かす）
+// OUT: 現在フレームの duration を変更（従来通り）
 // ============================================================
 (function setupInOutScrub(){
-  function makeScrubHandler(el){
+  function makeScrubHandler(el, which){
     let scrub = null;
     el.style.cursor = 'ew-resize';
     el.addEventListener('pointerdown', e => {
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
-      const f = state.frames[state.currentFrame];
-      if(!f || f.kind === 'empty') return;
-      scrub = { startX: e.clientX, origDur: f.duration };
+      if(which === 'IN'){
+        // IN スクラブ: 前フレームを対象
+        const prevIdx = state.currentFrame - 1;
+        if(prevIdx < 0) return; // フレーム0にはIN前がない
+        const prev = state.frames[prevIdx];
+        if(!prev) return;
+        scrub = { startX: e.clientX, origDur: prev.duration, targetIdx: prevIdx };
+      } else {
+        // OUT スクラブ: 現在フレームを対象
+        const f = state.frames[state.currentFrame];
+        if(!f || f.kind === 'empty') return;
+        scrub = { startX: e.clientX, origDur: f.duration, targetIdx: state.currentFrame };
+      }
     });
     el.addEventListener('pointermove', e => {
       if(!scrub) return;
-      const f = state.frames[state.currentFrame];
+      const f = state.frames[scrub.targetIdx];
       if(!f) return;
       const dx = e.clientX - scrub.startX;
       let newDur = scrub.origDur + Math.round(dx / state.cellStretchPerTick);
@@ -3344,7 +3482,9 @@ document.getElementById('btn-stop').addEventListener('click', stop);
     });
     function endScrub(){
       if(!scrub) return;
+      const changed = state.frames[scrub.targetIdx]?.duration !== scrub.origDur;
       scrub = null;
+      if(changed) pushTimelineHistory();
       markMetaDirty();
     }
     el.addEventListener('pointerup', endScrub);
@@ -3352,8 +3492,8 @@ document.getElementById('btn-stop').addEventListener('click', stop);
   }
   const inEl  = document.getElementById('frame-in');
   const outEl = document.getElementById('frame-pos');
-  if(inEl)  makeScrubHandler(inEl);
-  if(outEl) makeScrubHandler(outEl);
+  if(inEl)  makeScrubHandler(inEl,  'IN');
+  if(outEl) makeScrubHandler(outEl, 'OUT');
 })();
 
 document.getElementById('fps-input').addEventListener('change', e => {
@@ -3419,6 +3559,7 @@ function splitCurrentFrame(){
   updateTimeTrack();
   scrollFrameIntoView(state.currentFrame);
   scheduleSave();
+  pushTimelineHistory(); // タイムライン操作記録
 }
 document.getElementById('btn-split-frame').addEventListener('click', splitCurrentFrame);
 document.getElementById('strip-prev').addEventListener('click', () => {
@@ -3498,6 +3639,15 @@ window.addEventListener('keydown', e => {
   if(e.key === 'o' || e.key === 'O'){ document.getElementById('btn-onion').click(); }
   if(e.key === 'n' || e.key === 'N'){ document.getElementById('btn-add-frame').click(); }
   if(e.key === 'd' || e.key === 'D'){ document.getElementById('btn-dup-frame').click(); }
+  if(e.key === 's' || e.key === 'S'){ splitCurrentFrame(); }
+  if(e.key === 'w' || e.key === 'W'){
+    // ワークエリアを全範囲にリセット
+    state.workStart = 0;
+    state.workEnd = totalTicks();
+    updateTimeTrack();
+    updateDurInfo();
+    markMetaDirty();
+  }
   if(e.key === ' '){
     e.preventDefault();
     document.getElementById('btn-play').click();
@@ -3558,6 +3708,9 @@ window.addEventListener('resize', () => {
   updateTimeTrack();
   // 初回保存
   if(state.pendingSaveFrames.size > 0) scheduleSave();
+  // タイムライン履歴の初期スナップ（ロード後の状態を記録）
+  pushTimelineHistory();
+  state.lastEditWas = 'canvas'; // 初期はキャンバスUNDO優先
 })();
 
 // ページ離脱前に強制保存

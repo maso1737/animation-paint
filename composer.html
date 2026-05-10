@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COMPOSER v0.2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --acid:#36FF00;--neon:#F9FF47;--dim:#444;--black:#000;--white:#fff;
+  --panel:#0C0C0C;--panel2:#161616;
+  --border:rgba(255,255,255,0.08);--border-bright:rgba(54,255,0,0.3);
+  --mono:'Menlo','Consolas',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:var(--black);color:var(--white);font-family:var(--mono);font-size:11px;overflow:hidden;-webkit-user-select:none;user-select:none;}
+#app{display:grid;grid-template-columns:1fr 220px;grid-template-rows:32px 1fr 130px 24px;height:100vh;width:100vw;}
+
+/* TOPBAR */
+#topbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--border);background:var(--panel);font-size:9px;letter-spacing:0.25em;}
+#topbar .g{display:flex;gap:10px;align-items:center;}
+.title{color:var(--acid);font-weight:700;letter-spacing:0.3em;}
+.meta{color:rgba(255,255,255,0.35);}
+#topbar button{background:transparent;border:1px solid var(--border);color:rgba(255,255,255,0.7);font-family:var(--mono);font-size:9px;letter-spacing:0.12em;padding:4px 10px;cursor:pointer;transition:all 0.12s;}
+#topbar button:hover{border-color:var(--border-bright);color:var(--acid);}
+#topbar button.primary{border-color:var(--acid);color:var(--acid);}
+#topbar button.primary:hover{background:rgba(54,255,0,0.1);}
+#topbar button:disabled{opacity:0.3;cursor:default;}
+
+/* VIEWPORT */
+#viewport{position:relative;background:#080808;overflow:hidden;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--border);cursor:grab;}
+#viewport.dragging{cursor:grabbing;}
+#viewport-inner{position:relative;box-shadow:0 0 0 1px var(--border),0 4px 40px rgba(0,0,0,0.6);}
+#preview-canvas{display:block;image-rendering:pixelated;image-rendering:-moz-crisp-edges;}
+/* 位置ハンドル（□ + 十字） */
+#drag-handle{position:absolute;width:14px;height:14px;border:1px solid var(--acid);transform:translate(-50%,-50%);pointer-events:all;display:none;cursor:grab;z-index:2;}
+#drag-handle:active{cursor:grabbing;}
+#drag-handle::before,#drag-handle::after{content:'';position:absolute;background:var(--acid);}
+#drag-handle::before{left:50%;top:0;bottom:0;width:1px;transform:translateX(-50%);}
+#drag-handle::after{top:50%;left:0;right:0;height:1px;transform:translateY(-50%);}
+/* アンカーハンドル（× 印） */
+#anchor-handle{position:absolute;width:16px;height:16px;transform:translate(-50%,-50%);pointer-events:all;display:none;cursor:grab;z-index:3;}
+#anchor-handle:active{cursor:grabbing;}
+#anchor-handle::before,#anchor-handle::after{content:'';position:absolute;background:var(--neon);top:50%;left:0;right:0;height:1px;transform-origin:center;}
+#anchor-handle::before{transform:translateY(-50%) rotate(45deg);}
+#anchor-handle::after{transform:translateY(-50%) rotate(-45deg);}
+
+.corner{position:absolute;font-size:8px;letter-spacing:0.12em;pointer-events:none;}
+.corner.tl{top:10px;left:14px;}.corner.tr{top:10px;right:14px;text-align:right;}
+.corner.bl{bottom:10px;left:14px;}.corner.br{bottom:10px;right:14px;text-align:right;}
+.corner .lbl{color:rgba(54,255,0,0.5);}.corner .val{color:rgba(255,255,255,0.45);}
+#drop-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(54,255,0,0.05);border:1px dashed var(--acid);z-index:10;}
+#drop-overlay.show{display:flex;}
+#drop-overlay .msg{color:var(--acid);font-size:11px;letter-spacing:0.3em;}
+#empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;pointer-events:none;}
+#empty-state .glyph{font-size:48px;color:rgba(54,255,0,0.4);font-weight:200;}
+#empty-state .hint{font-size:9px;letter-spacing:0.3em;color:rgba(255,255,255,0.4);}
+#empty-state .sub{font-size:8px;letter-spacing:0.2em;color:rgba(255,255,255,0.2);margin-top:4px;}
+
+/* INSPECTOR */
+#inspector{background:var(--panel);border-left:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;overflow-y:auto;font-size:10px;}
+.insp-section{margin-bottom:14px;}
+.insp-h{font-size:8px;letter-spacing:0.3em;color:rgba(54,255,0,0.6);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.insp-row{display:flex;justify-content:space-between;padding:2px 0;}
+.insp-row .k{color:rgba(255,255,255,0.35);letter-spacing:0.08em;}
+.insp-row .v{color:rgba(255,255,255,0.85);}
+.insp-row .v.acid{color:var(--acid);}
+/* KF UI */
+.kf-row{display:flex;align-items:center;gap:4px;padding:3px 0;}
+.kf-row .k{color:rgba(255,255,255,0.35);width:36px;flex-shrink:0;font-size:9px;letter-spacing:0.08em;}
+.kf-val{background:var(--panel2);border:1px solid var(--border);color:rgba(255,255,255,0.8);font-family:var(--mono);font-size:10px;width:70px;padding:2px 5px;text-align:right;}
+.kf-val:focus{outline:none;border-color:var(--acid);color:var(--acid);}
+.kf-dot{width:10px;height:10px;border:1px solid var(--dim);cursor:pointer;flex-shrink:0;background:transparent;transition:all 0.1s;}
+.kf-dot.active{background:var(--neon);border-color:var(--neon);}
+.kf-dot:hover{border-color:var(--acid);}
+.kf-btn{width:100%;background:transparent;border:1px solid var(--border);color:rgba(255,255,255,0.5);font-family:var(--mono);font-size:8px;letter-spacing:0.1em;padding:3px 6px;cursor:pointer;margin-top:3px;}
+.kf-btn:hover{border-color:var(--border-bright);color:var(--acid);}
+
+/* TIMELINE */
+#timeline{grid-column:1/-1;background:var(--panel);border-top:1px solid var(--border);display:grid;grid-template-rows:24px 1fr;overflow:hidden;}
+#tl-ruler{position:relative;border-bottom:1px solid var(--border);background:var(--panel2);cursor:pointer;overflow:hidden;padding-left:154px;box-sizing:border-box;}
+#tl-ruler-canvas{display:block;width:100%;height:100%;}
+#tl-tracks{position:relative;overflow:hidden;}
+.tl-track{position:relative;height:54px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding-left:14px;}
+.tl-track-label{width:140px;flex-shrink:0;font-size:9px;letter-spacing:0.15em;color:rgba(255,255,255,0.6);}
+.tl-track-label .num{color:var(--acid);margin-right:6px;}
+.tl-track-strip{position:relative;flex:1;height:42px;background:rgba(255,255,255,0.02);border:1px solid var(--border);overflow:hidden;}
+.tl-frame-block{position:absolute;top:0;height:32px;border-right:1px solid rgba(0,0,0,0.5);overflow:hidden;}
+.tl-frame-block img.tl-thumb{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:fill;image-rendering:pixelated;image-rendering:-moz-crisp-edges;display:block;}
+.tl-frame-block .tl-label{position:absolute;bottom:1px;left:3px;font-size:7px;line-height:1;z-index:1;pointer-events:none;}
+.tl-frame-block.draw{border-right-color:rgba(54,255,0,0.3);}
+.tl-frame-block.draw .tl-label{color:rgba(0,0,0,0.8);}
+.tl-frame-block.empty{background:rgba(255,255,255,0.04);background-image:repeating-linear-gradient(45deg,transparent 0,transparent 4px,rgba(255,255,255,0.04) 4px,rgba(255,255,255,0.04) 5px);}
+.tl-frame-block.empty .tl-label{color:rgba(255,255,255,0.4);}
+/* KFダイヤモンド */
+#tl-kf-row{position:absolute;bottom:2px;left:0;right:0;height:10px;pointer-events:none;}
+.tl-kf-d{position:absolute;width:6px;height:6px;background:var(--neon);transform:translate(-50%,-50%) rotate(45deg);top:50%;pointer-events:all;cursor:pointer;}
+.tl-kf-d:hover{background:var(--acid);}
+#tl-playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--acid);pointer-events:none;z-index:5;box-shadow:0 0 6px rgba(54,255,0,0.5);}
+#tl-playhead::before{content:'';position:absolute;top:0;left:-4px;width:9px;height:6px;background:var(--acid);}
+
+/* TRANSPORT */
+#transport{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--panel);border-top:1px solid var(--border);font-size:9px;letter-spacing:0.2em;}
+#transport .g{display:flex;gap:8px;align-items:center;}
+#transport button{background:transparent;border:1px solid var(--border);color:rgba(255,255,255,0.7);font-family:var(--mono);font-size:10px;width:26px;height:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;}
+#transport button:hover{border-color:var(--border-bright);color:var(--acid);}
+#transport button.on{border-color:var(--acid);color:var(--acid);background:rgba(54,255,0,0.1);}
+.tc{color:var(--acid);font-size:10px;letter-spacing:0.15em;font-variant-numeric:tabular-nums;}
+.tc-dim{color:rgba(255,255,255,0.25);}
+.badge{color:rgba(54,255,0,0.5);font-size:8px;letter-spacing:0.3em;}
+
+/* EXPORT OVERLAY */
+#export-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:16px;}
+#export-overlay.show{display:flex;}
+#export-overlay .emsg{color:var(--acid);font-size:11px;letter-spacing:0.3em;}
+#export-overlay .eprog{color:rgba(255,255,255,0.45);font-size:9px;letter-spacing:0.2em;}
+#export-bar-wrap{width:320px;height:2px;background:rgba(255,255,255,0.1);}
+#export-bar{height:100%;width:0%;background:var(--acid);transition:width 0.08s;}
+
+#file-input{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="g">
+      <span class="title">COMPOSER</span>
+      <span style="color:var(--dim)">/</span>
+      <span class="meta">v0.2 — KEYFRAME</span>
+    </div>
+    <div class="g">
+      <span class="meta" id="proj-meta">— NO PROJECT —</span>
+    </div>
+    <div class="g">
+      <button id="btn-import" class="primary">IMPORT JSON</button>
+      <button id="btn-export" disabled>EXPORT 4K PNG</button>
+      <input type="file" id="file-input" accept=".json">
+    </div>
+  </div>
+
+  <div id="viewport">
+    <div class="corner tl"><span class="lbl">CMP/</span><span class="val" id="meta-tl">—</span></div>
+    <div class="corner tr"><span class="val" id="meta-tr">—</span><br><span class="lbl">RES/</span></div>
+    <div class="corner bl"><span class="lbl">FPS/</span><span class="val" id="meta-bl">—</span></div>
+    <div class="corner br"><span class="val" id="meta-br">[ — / — ]</span><br><span class="lbl">FRM/</span></div>
+    <div id="viewport-inner">
+      <canvas id="preview-canvas" width="640" height="360"></canvas>
+      <div id="drag-handle"></div>
+      <div id="anchor-handle" title="アンカーポイント（ドラッグで移動）"></div>
+    </div>
+    <div id="empty-state">
+      <div class="glyph">+</div>
+      <div class="hint">DRAG ANIMATOR_v1 JSON HERE</div>
+      <div class="hint" style="opacity:0.6">OR CLICK [IMPORT JSON]</div>
+      <div class="sub">[ ANIMATOR_v1 / NEAREST_NEIGHBOR / 4K_OUTPUT ]</div>
+    </div>
+    <div id="drop-overlay"><div class="msg">+ DROP TO LOAD +</div></div>
+  </div>
+
+  <div id="inspector">
+    <div class="insp-section">
+      <div class="insp-h">PROJECT</div>
+      <div class="insp-row"><span class="k">FPS</span><span class="v acid" id="i-fps">—</span></div>
+      <div class="insp-row"><span class="k">SRC</span><span class="v" id="i-res">—</span></div>
+      <div class="insp-row"><span class="k">FRAMES</span><span class="v" id="i-frames">—</span></div>
+      <div class="insp-row"><span class="k">DUR</span><span class="v acid" id="i-dur">—</span></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">OUTPUT</div>
+      <div class="insp-row"><span class="k">TARGET</span><span class="v acid">3840×2160</span></div>
+      <div class="insp-row"><span class="k">SCALE</span><span class="v" id="i-scale">—</span></div>
+      <div class="insp-row"><span class="k">FILTER</span><span class="v">NEAREST</span></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">TRANSFORM &nbsp;<span id="kf-status" style="font-size:7px;color:rgba(255,255,255,0.3)">NO KF</span></div>
+      <div class="kf-row"><span class="k">X</span><input class="kf-val" id="kf-x" type="number" value="0" step="1"><div class="kf-dot" id="dot-x"></div></div>
+      <div class="kf-row"><span class="k">Y</span><input class="kf-val" id="kf-y" type="number" value="0" step="1"><div class="kf-dot" id="dot-y"></div></div>
+      <div class="kf-row"><span class="k">SCL</span><input class="kf-val" id="kf-s" type="number" value="1.000" step="0.01"><div class="kf-dot" id="dot-s"></div></div>
+      <div class="kf-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px">
+        <span class="k">AX</span><input class="kf-val" id="kf-ax" type="number" value="0" step="1"><div class="kf-dot" id="dot-ax"></div>
+      </div>
+      <div class="kf-row"><span class="k">AY</span><input class="kf-val" id="kf-ay" type="number" value="0" step="1"><div class="kf-dot" id="dot-ay"></div></div>
+      <button class="kf-btn" id="btn-kf-add">+ ADD KEYFRAME HERE</button>
+      <button class="kf-btn" id="btn-kf-clear">✕ CLEAR ALL KF</button>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">CURRENT FRAME</div>
+      <div class="insp-row"><span class="k">FRAME</span><span class="v acid" id="i-cur">—</span></div>
+      <div class="insp-row"><span class="k">CELL</span><span class="v" id="i-cell">—</span></div>
+    </div>
+  </div>
+
+  <div id="timeline">
+    <div id="tl-ruler">
+      <canvas id="tl-ruler-canvas"></canvas>
+      <div id="tl-playhead" style="left:154px"></div>
+    </div>
+    <div id="tl-tracks">
+      <div class="tl-track" id="track-0">
+        <div class="tl-track-label"><span class="num">01</span>EMPTY</div>
+        <div class="tl-track-strip" id="track-strip-0">
+          <div id="tl-kf-row"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="transport">
+    <div class="g">
+      <span class="badge">TRANSPORT</span>
+      <button id="btn-first">|◀</button>
+      <button id="btn-prev">◀</button>
+      <button id="btn-play">▶</button>
+      <button id="btn-next">▶</button>
+      <button id="btn-last">▶|</button>
+      <button id="btn-loop" class="on">⟲</button>
+    </div>
+    <div class="g">
+      <span class="tc-dim">FRAME</span>
+      <span class="tc" id="tc-frame">—— / ——</span>
+      <span class="tc-dim">/</span>
+      <span class="tc-dim">TIME</span>
+      <span class="tc" id="tc-time">00:00.000</span>
+    </div>
+  </div>
+
+</div>
+
+<div id="export-overlay">
+  <div class="emsg">EXPORTING 4K PNG SEQUENCE</div>
+  <div id="export-bar-wrap"><div id="export-bar"></div></div>
+  <div class="eprog" id="export-prog">0 / 0</div>
+</div>
+
+<script>
+const LABEL_W = 154;
+const OUT_W = 3840, OUT_H = 2160;
+
+const state = {
+  project:null, frames:[], totalFrames:0, currentFrame:0,
+  fps:24, width:0, height:0, bgBright:100,
+  isPlaying:false, loop:true, lastTimestamp:0, frameAccumulator:0,
+  keyframes:{x:[],y:[],s:[],ax:[],ay:[]},
+  vpDragging:false, vpDragStart:null, vpDragKfStart:null,
+};
+
+const $=s=>document.querySelector(s);
+const canvas=$('#preview-canvas');
+const ctx=canvas.getContext('2d'); ctx.imageSmoothingEnabled=false;
+const rulerCanvas=$('#tl-ruler-canvas');
+const rulerCtx=rulerCanvas.getContext('2d');
+
+// ── キーフレーム補間 ──
+function getKfValue(prop,frame){
+  const kfs=state.keyframes[prop];
+  const def=prop==='s'?1:0;
+  if(!kfs.length) return def;
+  if(kfs.length===1) return kfs[0].v;
+  if(frame<=kfs[0].f) return kfs[0].v;
+  if(frame>=kfs[kfs.length-1].f) return kfs[kfs.length-1].v;
+  for(let i=0;i<kfs.length-1;i++){
+    if(frame>=kfs[i].f&&frame<=kfs[i+1].f){
+      const t=(frame-kfs[i].f)/(kfs[i+1].f-kfs[i].f);
+      return kfs[i].v+(kfs[i+1].v-kfs[i].v)*t;
+    }
+  }
+  return def;
+}
+function getTransform(frame){return{x:getKfValue('x',frame),y:getKfValue('y',frame),s:getKfValue('s',frame),ax:getKfValue('ax',frame),ay:getKfValue('ay',frame)};}
+function hasKfAt(prop,frame){return state.keyframes[prop].some(k=>k.f===frame);}
+function setKf(prop,frame,value){
+  const kfs=state.keyframes[prop];
+  const ex=kfs.find(k=>k.f===frame);
+  if(ex){ex.v=value;}else{kfs.push({f:frame,v:value});kfs.sort((a,b)=>a.f-b.f);}
+}
+function removeKf(prop,frame){state.keyframes[prop]=state.keyframes[prop].filter(k=>k.f!==frame);}
+function addKfAtCurrent(){
+  const f=state.currentFrame;
+  setKf('x',f,parseFloat($('#kf-x').value)||0);
+  setKf('y',f,parseFloat($('#kf-y').value)||0);
+  setKf('s',f,parseFloat($('#kf-s').value)||1);
+  setKf('ax',f,parseFloat($('#kf-ax').value)||0);
+  setKf('ay',f,parseFloat($('#kf-ay').value)||0);
+  renderKfDiamonds(); drawCurrentFrame();
+}
+function clearAllKf(){
+  if(!confirm('全キーフレームを削除しますか？')) return;
+  state.keyframes={x:[],y:[],s:[],ax:[],ay:[]};
+  renderKfDiamonds(); drawCurrentFrame();
+}
+
+// ── IMPORT ──
+function loadJSON(json){
+  if(json.format!=='ANIMATOR_v1'){alert('Unsupported: '+json.format);return;}
+  state.project=json; state.fps=json.fps||24;
+  state.width=json.width; state.height=json.height;
+  state.bgBright=json.bgBright??100;
+  state.keyframes={x:[],y:[],s:[],ax:[],ay:[]};
+  state.frames=[];
+  const cellInfos=[]; let ci=0;
+  for(const cell of json.frames){
+    const dur=cell.duration||1,isEmpty=cell.kind==='empty',hidden=cell.hidden===true;
+    let img=null;
+    if(!isEmpty&&!hidden&&cell.image){img=new Image();img.src=cell.image;}
+    cellInfos.push({cellIdx:ci,kind:cell.kind,duration:dur,hidden,startFrame:state.frames.length,image:img});
+    for(let i=0;i<dur;i++) state.frames.push({kind:cell.kind,hidden,image:img,srcCellIndex:ci,cellOffset:i});
+    ci++;
+  }
+  state.totalFrames=state.frames.length; state.currentFrame=0;
+  setupViewport(); buildTimeline(cellInfos);
+  updateInspector(); updateKfUI(); drawCurrentFrame(); updateTransport();
+  $('#empty-state').style.display='none';
+  $('#btn-export').disabled=false;
+}
+
+// ── VIEWPORT ──
+function setupViewport(){
+  const vp=$('#viewport'),inner=$('#viewport-inner');
+  const pad=60,availW=vp.clientWidth-pad*2,availH=vp.clientHeight-pad*2;
+  const aspect=state.width/state.height;
+  let w=availW,h=w/aspect;
+  if(h>availH){h=availH;w=h*aspect;}
+  inner.style.width=w+'px'; inner.style.height=h+'px';
+  canvas.width=state.width; canvas.height=state.height;
+  canvas.style.width=w+'px'; canvas.style.height=h+'px';
+  ctx.imageSmoothingEnabled=false;
+}
+
+// ── RENDER ──
+function drawFrame(targetCtx,tw,th,frameIdx){
+  const bg=Math.round(255*(state.bgBright/100));
+  targetCtx.fillStyle=`rgb(${bg},${bg},${bg})`;
+  targetCtx.fillRect(0,0,tw,th);
+  const f=state.frames[frameIdx];
+  if(f&&f.kind==='draw'&&!f.hidden&&f.image&&f.image.complete){
+    const tr=getTransform(frameIdx);
+    const sx=tw/state.width,sy=th/state.height;
+    // アンカーポイントを基準にスケール
+    // 画面中央 + 位置オフセット + アンカーオフセット = スケール原点
+    const pivotX=tw/2 + tr.x*sx + tr.ax*sx;
+    const pivotY=th/2 + tr.y*sy + tr.ay*sy;
+    targetCtx.save();
+    targetCtx.imageSmoothingEnabled=false;
+    targetCtx.translate(pivotX, pivotY);
+    targetCtx.scale(tr.s, tr.s);
+    // アンカー分だけ画像を逆オフセット
+    targetCtx.drawImage(f.image, -tw/2-tr.ax*sx, -th/2-tr.ay*sy, tw, th);
+    targetCtx.restore();
+  }
+}
+
+function drawCurrentFrame(){
+  if(!state.width) return;
+  drawFrame(ctx,state.width,state.height,state.currentFrame);
+  const tr=getTransform(state.currentFrame);
+  const inner=$('#viewport-inner');
+  const sx=inner.clientWidth/state.width,sy=inner.clientHeight/state.height;
+  const show=!!state.project;
+  // 位置ハンドル: 画面中央 + X/Y
+  const handle=$('#drag-handle');
+  handle.style.left=(state.width/2+tr.x)*sx+'px';
+  handle.style.top=(state.height/2+tr.y)*sy+'px';
+  handle.style.display=show?'block':'none';
+  // アンカーハンドル: 画面中央 + X/Y + AX/AY
+  const ah=$('#anchor-handle');
+  ah.style.left=(state.width/2+tr.x+tr.ax)*sx+'px';
+  ah.style.top=(state.height/2+tr.y+tr.ay)*sy+'px';
+  ah.style.display=show?'block':'none';
+  updatePlayhead(); updateKfUI(); updateInspectorCurrent(); updateTransport();
+}
+
+// ── TIMELINE ──
+function buildTimeline(cellInfos){
+  const strip=$('#track-strip-0');
+  const kfRow=$('#tl-kf-row');
+  strip.innerHTML=''; strip.appendChild(kfRow);
+  const total=state.totalFrames; if(!total) return;
+  for(const c of cellInfos){
+    const block=document.createElement('div');
+    block.className='tl-frame-block '+(c.kind==='empty'?'empty':'draw');
+    block.style.left=(c.startFrame/total*100)+'%';
+    block.style.width=(c.duration/total*100)+'%';
+    const lbl=document.createElement('div'); lbl.className='tl-label';
+    const cn=String(c.cellIdx+1).padStart(3,'0');
+    lbl.textContent=c.duration>1?`${cn}·${c.duration}`:cn;
+    block.appendChild(lbl);
+    if(c.kind==='draw'&&c.image){
+      const thumb=document.createElement('img'); thumb.className='tl-thumb';
+      const oc=document.createElement('canvas'); oc.width=160;oc.height=90;
+      const oc2d=oc.getContext('2d'); oc2d.imageSmoothingEnabled=false;
+      const dt=()=>{
+        const bg=Math.round(255*(state.bgBright/100));
+        oc2d.fillStyle=`rgb(${bg},${bg},${bg})`;oc2d.fillRect(0,0,160,90);
+        oc2d.drawImage(c.image,0,0,160,90); thumb.src=oc.toDataURL();
+      };
+      if(c.image.complete&&c.image.naturalWidth>0) dt();
+      else c.image.addEventListener('load',dt,{once:true});
+      block.appendChild(thumb);
+    }
+    strip.appendChild(block);
+  }
+  const lbl=document.querySelector('#track-0 .tl-track-label');
+  lbl.innerHTML=`<span class="num">01</span>${(state.project.scene||'CUT_01').toUpperCase()}`;
+  drawRuler(); renderKfDiamonds();
+}
+
+function renderKfDiamonds(){
+  const row=$('#tl-kf-row'); row.innerHTML='';
+  const total=state.totalFrames; if(!total) return;
+  const frames=new Set([
+    ...state.keyframes.x.map(k=>k.f),
+    ...state.keyframes.y.map(k=>k.f),
+    ...state.keyframes.s.map(k=>k.f),
+    ...state.keyframes.ax.map(k=>k.f),
+    ...state.keyframes.ay.map(k=>k.f),
+  ]);
+  for(const f of frames){
+    const d=document.createElement('div'); d.className='tl-kf-d';
+    d.style.left=(f/total*100)+'%'; d.title=`F${f+1}`;
+    d.addEventListener('click',()=>seek(f));
+    row.appendChild(d);
+  }
+}
+
+function drawRuler(){
+  const c=rulerCanvas,dpr=window.devicePixelRatio||1;
+  c.width=c.clientWidth*dpr; c.height=c.clientHeight*dpr;
+  rulerCtx.clearRect(0,0,c.width,c.height); rulerCtx.scale(dpr,dpr);
+  const total=state.totalFrames; if(!total) return;
+  const cw=c.clientWidth,ch=c.clientHeight,fps=state.fps;
+  const ppf=cw/total; let stride=1;
+  for(const s of[1,2,4,fps/2,fps,fps*2,fps*5,fps*10]){if(s*ppf>=50){stride=s;break;}stride=s;}
+  stride=Math.max(1,Math.round(stride));
+  rulerCtx.font='8px Menlo,Consolas,monospace'; rulerCtx.textBaseline='middle';
+  for(let f=0;f<=total;f+=stride){
+    const x=(f/total)*cw,isSec=f%fps===0;
+    rulerCtx.strokeStyle=isSec?'rgba(54,255,0,0.5)':'rgba(255,255,255,0.18)';
+    rulerCtx.beginPath();rulerCtx.moveTo(x+.5,ch);rulerCtx.lineTo(x+.5,isSec?ch-10:ch-6);rulerCtx.stroke();
+    if(isSec){rulerCtx.fillStyle='rgba(54,255,0,0.7)';rulerCtx.fillText(String(f+1).padStart(5,'0'),x+4,ch/2-1);}
+    else if(stride<=fps/2){rulerCtx.fillStyle='rgba(255,255,255,0.22)';rulerCtx.fillText(String(f+1).padStart(5,'0'),x+4,ch/2-1);}
+  }
+}
+
+// ── PLAYBACK ──
+function updatePlayhead(){
+  const total=state.totalFrames||1;
+  const rw=$('#tl-ruler').clientWidth,sw=rw-LABEL_W;
+  $('#tl-playhead').style.left=(LABEL_W+state.currentFrame/total*sw)+'px';
+}
+function tick(ts){
+  if(!state.isPlaying) return;
+  if(!state.lastTimestamp) state.lastTimestamp=ts;
+  const dt=(ts-state.lastTimestamp)/1000; state.lastTimestamp=ts;
+  state.frameAccumulator+=dt*state.fps;
+  while(state.frameAccumulator>=1){
+    state.currentFrame++; state.frameAccumulator--;
+    if(state.currentFrame>=state.totalFrames){
+      if(state.loop) state.currentFrame=0;
+      else{state.currentFrame=state.totalFrames-1;state.isPlaying=false;$('#btn-play').textContent='▶';}
+    }
+  }
+  drawCurrentFrame();
+  if(state.isPlaying) requestAnimationFrame(tick);
+}
+function play(){if(!state.totalFrames)return;state.isPlaying=true;state.lastTimestamp=0;state.frameAccumulator=0;$('#btn-play').textContent='❙❙';requestAnimationFrame(tick);}
+function pause(){state.isPlaying=false;$('#btn-play').textContent='▶';}
+function togglePlay(){state.isPlaying?pause():play();}
+function seek(f){state.currentFrame=Math.max(0,Math.min(state.totalFrames-1,f));drawCurrentFrame();}
+
+// ── INSPECTOR / KF UI ──
+function updateInspector(){
+  const p=state.project; if(!p) return;
+  $('#i-fps').textContent=state.fps;
+  $('#i-res').textContent=`${state.width}×${state.height}`;
+  $('#i-frames').textContent=state.totalFrames;
+  $('#i-dur').textContent=(state.totalFrames/state.fps).toFixed(2)+'s';
+  $('#i-scale').textContent=`×${(OUT_W/state.width).toFixed(3)}`;
+  $('#proj-meta').textContent=`${p.format} / ${state.width}×${state.height} / ${state.fps}fps / ${state.totalFrames}f`;
+  $('#meta-tl').textContent=(p.scene||'CUT_01').toUpperCase();
+  $('#meta-tr').textContent=`${state.width}×${state.height}`;
+  $('#meta-bl').textContent=state.fps;
+}
+function updateInspectorCurrent(){
+  const f=state.frames[state.currentFrame];
+  $('#i-cur').textContent=String(state.currentFrame+1).padStart(4,'0');
+  if(f) $('#i-cell').textContent=String(f.srcCellIndex+1).padStart(2,'0')+' ['+f.cellOffset+']';
+  $('#meta-br').textContent=`[ ${String(state.currentFrame+1).padStart(4,'0')} / ${String(state.totalFrames).padStart(4,'0')} ]`;
+}
+function updateKfUI(){
+  const f=state.currentFrame,tr=getTransform(f);
+  $('#kf-x').value=Math.round(tr.x);
+  $('#kf-y').value=Math.round(tr.y);
+  $('#kf-s').value=tr.s.toFixed(3);
+  $('#kf-ax').value=Math.round(tr.ax);
+  $('#kf-ay').value=Math.round(tr.ay);
+  ['x','y','s','ax','ay'].forEach(p=>$(`#dot-${p}`).classList.toggle('active',hasKfAt(p,f)));
+  const total=[...state.keyframes.x,...state.keyframes.y,...state.keyframes.s,...state.keyframes.ax,...state.keyframes.ay].length;
+  $('#kf-status').textContent=total?`${total} KF`:'NO KF';
+  $('#kf-status').style.color=total?'var(--neon)':'rgba(255,255,255,0.3)';
+}
+function updateTransport(){
+  const cur=state.currentFrame,total=state.totalFrames;
+  $('#tc-frame').textContent=`${String(cur+1).padStart(4,'0')} / ${String(total).padStart(4,'0')}`;
+  const sec=cur/state.fps,m=Math.floor(sec/60),s=Math.floor(sec%60),ms=Math.floor((sec%1)*1000);
+  $('#tc-time').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
+}
+
+// ── 4K EXPORT ──
+async function exportPNG(){
+  if(!state.totalFrames) return;
+  pause();
+  const ov=$('#export-overlay'); ov.classList.add('show');
+  const bar=$('#export-bar'),prog=$('#export-prog');
+  const oc=document.createElement('canvas'); oc.width=OUT_W; oc.height=OUT_H;
+  const oc2d=oc.getContext('2d'); oc2d.imageSmoothingEnabled=false;
+  const zip=new JSZip(),folder=zip.folder('frames');
+  for(let i=0;i<state.totalFrames;i++){
+    drawFrame(oc2d,OUT_W,OUT_H,i);
+    folder.file(`frame_${String(i+1).padStart(5,'0')}.png`,oc.toDataURL('image/png').split(',')[1],{base64:true});
+    const pct=((i+1)/state.totalFrames*100).toFixed(1);
+    bar.style.width=pct+'%'; prog.textContent=`${i+1} / ${state.totalFrames} — ${pct}%`;
+    if(i%4===3) await new Promise(r=>setTimeout(r,0));
+  }
+  prog.textContent='ZIPPING...';
+  const blob=await zip.generateAsync({type:'blob'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='composer_4k.zip'; a.click();
+  URL.revokeObjectURL(url);
+  ov.classList.remove('show'); bar.style.width='0%';
+}
+
+// ── EVENTS ──
+$('#btn-import').addEventListener('click',()=>$('#file-input').click());
+$('#file-input').addEventListener('change',async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  try{loadJSON(JSON.parse(await file.text()));}catch(err){alert('JSON error: '+err.message);}
+  e.target.value='';
+});
+$('#btn-export').addEventListener('click',exportPNG);
+$('#btn-kf-add').addEventListener('click',addKfAtCurrent);
+$('#btn-kf-clear').addEventListener('click',clearAllKf);
+
+['x','y','s','ax','ay'].forEach(prop=>{
+  $(`#kf-${prop}`).addEventListener('change',()=>{
+    if(hasKfAt(prop,state.currentFrame)){
+      setKf(prop,state.currentFrame,parseFloat($(`#kf-${prop}`).value)||(prop==='s'?1:0));
+      renderKfDiamonds(); drawCurrentFrame();
+    }
+  });
+  $(`#dot-${prop}`).addEventListener('click',()=>{
+    const f=state.currentFrame;
+    if(hasKfAt(prop,f)) removeKf(prop,f);
+    else setKf(prop,f,parseFloat($(`#kf-${prop}`).value)||(prop==='s'?1:0));
+    renderKfDiamonds(); drawCurrentFrame();
+  });
+});
+
+// アンカーハンドルドラッグ
+const anchorHandle=$('#anchor-handle');
+let anchorDragging=false, anchorDragStart=null, anchorDragKfStart=null;
+anchorHandle.addEventListener('pointerdown',e=>{
+  if(!state.project) return;
+  pause();
+  anchorDragging=true;
+  anchorDragStart={px:e.clientX,py:e.clientY};
+  anchorDragKfStart={ax:parseFloat($('#kf-ax').value)||0,ay:parseFloat($('#kf-ay').value)||0};
+  anchorHandle.setPointerCapture(e.pointerId);
+  e.preventDefault(); e.stopPropagation();
+});
+anchorHandle.addEventListener('pointermove',e=>{
+  if(!anchorDragging) return;
+  const inner=$('#viewport-inner');
+  const sx=state.width/inner.clientWidth,sy=state.height/inner.clientHeight;
+  setKf('ax',state.currentFrame,Math.round(anchorDragKfStart.ax+(e.clientX-anchorDragStart.px)*sx));
+  setKf('ay',state.currentFrame,Math.round(anchorDragKfStart.ay+(e.clientY-anchorDragStart.py)*sy));
+  renderKfDiamonds(); drawCurrentFrame();
+});
+anchorHandle.addEventListener('pointerup',()=>{anchorDragging=false;});
+
+// ビューポートドラッグ（オートキー）
+const vpInner=$('#viewport-inner');
+vpInner.addEventListener('pointerdown',e=>{
+  if(!state.project) return;
+  pause();
+  state.vpDragging=true;
+  state.vpDragStart={px:e.clientX,py:e.clientY};
+  state.vpDragKfStart={x:parseFloat($('#kf-x').value)||0,y:parseFloat($('#kf-y').value)||0};
+  vpInner.setPointerCapture(e.pointerId);
+  $('#viewport').classList.add('dragging');
+  e.preventDefault();
+});
+vpInner.addEventListener('pointermove',e=>{
+  if(!state.vpDragging) return;
+  const inner=$('#viewport-inner');
+  const sx=state.width/inner.clientWidth,sy=state.height/inner.clientHeight;
+  setKf('x',state.currentFrame,Math.round(state.vpDragKfStart.x+(e.clientX-state.vpDragStart.px)*sx));
+  setKf('y',state.currentFrame,Math.round(state.vpDragKfStart.y+(e.clientY-state.vpDragStart.py)*sy));
+  renderKfDiamonds(); drawCurrentFrame();
+});
+vpInner.addEventListener('pointerup',()=>{state.vpDragging=false;$('#viewport').classList.remove('dragging');});
+
+$('#btn-play').addEventListener('click',togglePlay);
+$('#btn-prev').addEventListener('click',()=>{pause();seek(state.currentFrame-1);});
+$('#btn-next').addEventListener('click',()=>{pause();seek(state.currentFrame+1);});
+$('#btn-first').addEventListener('click',()=>{pause();seek(0);});
+$('#btn-last').addEventListener('click',()=>{pause();seek(state.totalFrames-1);});
+$('#btn-loop').addEventListener('click',()=>{state.loop=!state.loop;$('#btn-loop').classList.toggle('on',state.loop);});
+
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT') return;
+  if(e.code==='Space'){e.preventDefault();togglePlay();}
+  else if(e.code==='ArrowLeft'){pause();seek(state.currentFrame-1);}
+  else if(e.code==='ArrowRight'){pause();seek(state.currentFrame+1);}
+  else if(e.code==='Home'){pause();seek(0);}
+  else if(e.code==='End'){pause();seek(state.totalFrames-1);}
+});
+
+let scrubbing=false;
+function rulerScrub(e){
+  const rect=$('#tl-ruler').getBoundingClientRect();
+  const x=e.clientX-rect.left-LABEL_W,aw=rect.width-LABEL_W;
+  pause(); seek(Math.floor(Math.max(0,Math.min(1,x/aw))*state.totalFrames));
+}
+$('#tl-ruler').addEventListener('pointerdown',e=>{scrubbing=true;rulerScrub(e);});
+window.addEventListener('pointermove',e=>{if(scrubbing)rulerScrub(e);});
+window.addEventListener('pointerup',()=>{scrubbing=false;});
+
+const vp=$('#viewport'),dropOv=$('#drop-overlay');
+['dragenter','dragover'].forEach(ev=>vp.addEventListener(ev,e=>{e.preventDefault();dropOv.classList.add('show');}));
+['dragleave','drop'].forEach(ev=>vp.addEventListener(ev,e=>{e.preventDefault();dropOv.classList.remove('show');}));
+vp.addEventListener('drop',async e=>{
+  e.preventDefault();
+  const file=e.dataTransfer.files[0]; if(!file) return;
+  try{loadJSON(JSON.parse(await file.text()));}catch(err){alert('JSON error: '+err.message);}
+});
+
+window.addEventListener('resize',()=>{if(state.project) setupViewport(); drawRuler(); updatePlayhead();});
+drawRuler();
+</script>
+</body>
+</html>

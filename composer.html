@@ -93,11 +93,18 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
 .tl-frame-block.empty{background:rgba(255,255,255,0.04);background-image:repeating-linear-gradient(45deg,transparent 0,transparent 4px,rgba(255,255,255,0.04) 4px,rgba(255,255,255,0.04) 5px);}
 .tl-frame-block.empty .tl-label{color:rgba(255,255,255,0.4);}
 /* KFダイヤモンド */
-#tl-kf-row{position:absolute;bottom:2px;left:0;right:0;height:10px;pointer-events:none;}
+#tl-kf-row{position:absolute;bottom:12px;left:0;right:0;height:10px;pointer-events:none;}
 .tl-kf-d{position:absolute;width:6px;height:6px;background:var(--neon);transform:translate(-50%,-50%) rotate(45deg);top:50%;pointer-events:all;cursor:pointer;}
 .tl-kf-d:hover{background:var(--acid);}
+/* マーカー */
+#tl-marker-row{position:absolute;bottom:0;left:0;right:0;height:11px;pointer-events:none;}
+.tl-marker{position:absolute;top:0;bottom:0;width:1px;background:rgba(249,255,71,0.8);pointer-events:all;cursor:pointer;transform:translateX(-50%);}
+.tl-marker::after{content:attr(data-label);position:absolute;top:0;left:2px;font-size:7px;color:var(--neon);white-space:nowrap;letter-spacing:0.05em;line-height:11px;pointer-events:none;}
+.tl-marker:hover{background:var(--neon);}
 #tl-playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--acid);pointer-events:none;z-index:5;box-shadow:0 0 6px rgba(54,255,0,0.5);}
 #tl-playhead::before{content:'';position:absolute;top:0;left:-4px;width:9px;height:6px;background:var(--acid);}
+/* AEショートカット プロパティ非表示 */
+.kf-row.prop-hidden{display:none;}
 
 /* TRANSPORT */
 #transport{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--panel);border-top:1px solid var(--border);font-size:9px;letter-spacing:0.2em;}
@@ -176,14 +183,14 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
       <div class="insp-row"><span class="k">FILTER</span><span class="v">NEAREST</span></div>
     </div>
     <div class="insp-section">
-      <div class="insp-h">TRANSFORM &nbsp;<span id="kf-status" style="font-size:7px;color:rgba(255,255,255,0.3)">NO KF</span></div>
-      <div class="kf-row"><span class="k">X</span><input class="kf-val" id="kf-x" type="number" value="0" step="1"><div class="kf-dot" id="dot-x"></div></div>
-      <div class="kf-row"><span class="k">Y</span><input class="kf-val" id="kf-y" type="number" value="0" step="1"><div class="kf-dot" id="dot-y"></div></div>
-      <div class="kf-row"><span class="k">SCL</span><input class="kf-val" id="kf-s" type="number" value="1.000" step="0.01"><div class="kf-dot" id="dot-s"></div></div>
-      <div class="kf-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px">
+      <div class="insp-h">TRANSFORM &nbsp;<span id="kf-status" style="font-size:7px;color:rgba(255,255,255,0.3)">NO KF</span><span style="float:right;color:rgba(255,255,255,0.2);font-size:7px">P/S/A/U</span></div>
+      <div class="kf-row" data-prop="x"><span class="k">X</span><input class="kf-val" id="kf-x" type="number" value="0" step="1"><div class="kf-dot" id="dot-x"></div></div>
+      <div class="kf-row" data-prop="y"><span class="k">Y</span><input class="kf-val" id="kf-y" type="number" value="0" step="1"><div class="kf-dot" id="dot-y"></div></div>
+      <div class="kf-row" data-prop="s"><span class="k">SCL</span><input class="kf-val" id="kf-s" type="number" value="1.000" step="0.01"><div class="kf-dot" id="dot-s"></div></div>
+      <div class="kf-row" data-prop="ax" style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px">
         <span class="k">AX</span><input class="kf-val" id="kf-ax" type="number" value="0" step="1"><div class="kf-dot" id="dot-ax"></div>
       </div>
-      <div class="kf-row"><span class="k">AY</span><input class="kf-val" id="kf-ay" type="number" value="0" step="1"><div class="kf-dot" id="dot-ay"></div></div>
+      <div class="kf-row" data-prop="ay"><span class="k">AY</span><input class="kf-val" id="kf-ay" type="number" value="0" step="1"><div class="kf-dot" id="dot-ay"></div></div>
       <button class="kf-btn" id="btn-kf-add">+ ADD KEYFRAME HERE</button>
       <button class="kf-btn" id="btn-kf-clear">✕ CLEAR ALL KF</button>
     </div>
@@ -204,6 +211,7 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
         <div class="tl-track-label"><span class="num">01</span>EMPTY</div>
         <div class="tl-track-strip" id="track-strip-0">
           <div id="tl-kf-row"></div>
+          <div id="tl-marker-row"></div>
         </div>
       </div>
     </div>
@@ -212,6 +220,8 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
   <div id="transport">
     <div class="g">
       <span class="badge">TRANSPORT</span>
+      <button id="btn-undo" title="Undo (Ctrl+Z)">↩</button>
+      <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪</button>
       <button id="btn-first">|◀</button>
       <button id="btn-prev">◀</button>
       <button id="btn-play">▶</button>
@@ -251,6 +261,11 @@ const state = {
   workArea: null,         // {startFrame, endFrame} or null
   frameLayerMeta: null,   // {visible, opacity, image} 往復用
   vpDragging:false, vpDragStart:null, vpDragKfStart:null,
+  // UNDO/REDO
+  history: [],            // [{keyframes, markers}] スナップショット列
+  historyIdx: -1,         // 現在位置
+  // AE ショートカット表示状態
+  propVisible: {x:true, y:true, s:true, ax:true, ay:true},
 };
 
 const $=s=>document.querySelector(s);
@@ -282,7 +297,9 @@ function setKf(prop,frame,value){
   const ex=kfs.find(k=>k.f===frame);
   if(ex){ex.v=value;}else{kfs.push({f:frame,v:value});kfs.sort((a,b)=>a.f-b.f);}
 }
-function removeKf(prop,frame){state.keyframes[prop]=state.keyframes[prop].filter(k=>k.f!==frame);}
+function removeKf(prop,frame){
+  state.keyframes[prop]=state.keyframes[prop].filter(k=>k.f!==frame);
+}
 function addKfAtCurrent(){
   const f=state.currentFrame;
   setKf('x',f,parseFloat($('#kf-x').value)||0);
@@ -290,12 +307,117 @@ function addKfAtCurrent(){
   setKf('s',f,parseFloat($('#kf-s').value)||1);
   setKf('ax',f,parseFloat($('#kf-ax').value)||0);
   setKf('ay',f,parseFloat($('#kf-ay').value)||0);
-  renderKfDiamonds(); drawCurrentFrame();
+  recordHistory(); renderKfDiamonds(); drawCurrentFrame();
 }
 function clearAllKf(){
   if(!confirm('全キーフレームを削除しますか？')) return;
   state.keyframes={x:[],y:[],s:[],ax:[],ay:[]};
-  renderKfDiamonds(); drawCurrentFrame();
+  recordHistory(); renderKfDiamonds(); drawCurrentFrame();
+}
+
+// ── UNDO / REDO ──
+// 「変更後に記録」方式: history[idx] = 現在の確定状態
+function cloneEditState(){
+  return {
+    keyframes:{
+      x: state.keyframes.x.map(k=>({...k})),
+      y: state.keyframes.y.map(k=>({...k})),
+      s: state.keyframes.s.map(k=>({...k})),
+      ax:state.keyframes.ax.map(k=>({...k})),
+      ay:state.keyframes.ay.map(k=>({...k})),
+    },
+    markers: state.markers.map(m=>({...m})),
+  };
+}
+// 変更完了後に呼ぶ（ドラッグ完了・ボタン操作後など）
+function recordHistory(){
+  state.history.splice(state.historyIdx+1);
+  state.history.push(cloneEditState());
+  if(state.history.length > 51) state.history.shift();
+  state.historyIdx = state.history.length-1;
+  updateUndoButtons();
+}
+function applyHistory(snap){
+  state.keyframes = snap.keyframes;
+  state.markers   = snap.markers;
+  renderKfDiamonds(); renderMarkers(); drawCurrentFrame();
+  updateUndoButtons();
+}
+function undo(){
+  if(state.historyIdx<=0) return;
+  state.historyIdx--;
+  applyHistory(state.history[state.historyIdx]);
+}
+function redo(){
+  if(state.historyIdx>=state.history.length-1) return;
+  state.historyIdx++;
+  applyHistory(state.history[state.historyIdx]);
+}
+function updateUndoButtons(){
+  const u=$('#btn-undo'),r=$('#btn-redo');
+  if(u) u.disabled=state.historyIdx<=0;
+  if(r) r.disabled=state.historyIdx>=state.history.length-1;
+}
+// 旧名エイリアス（既存コードとの互換）
+function pushHistory(){ recordHistory(); }
+
+// ── MARKER 描画 ──
+function renderMarkers(){
+  const row=$('#tl-marker-row'); if(!row) return;
+  row.innerHTML='';
+  const total=state.totalFrames; if(!total) return;
+  for(const m of state.markers){
+    const el=document.createElement('div');
+    el.className='tl-marker';
+    el.style.left=(m.frame/total*100)+'%';
+    el.dataset.label = m.label || ('M'+(state.markers.indexOf(m)+1));
+    el.title=`コマ${m.frame+1}${m.label?' — '+m.label:''}  (クリックでシーク)`;
+    el.addEventListener('click',()=>seek(m.frame));
+    row.appendChild(el);
+  }
+}
+
+// ── AE ショートカット プロパティ表示切替 ──
+// groups: P=position(x,y), S=scale(s), A=anchor(ax,ay), U=有KFのみ
+function applyPropVisible(){
+  document.querySelectorAll('.kf-row[data-prop]').forEach(el=>{
+    const p = el.dataset.prop;
+    el.classList.toggle('prop-hidden', !state.propVisible[p]);
+  });
+}
+function togglePropGroup(props, all){
+  // all=true のとき全表示に戻す
+  if(all){
+    for(const k of Object.keys(state.propVisible)) state.propVisible[k]=true;
+    applyPropVisible(); return;
+  }
+  // 対象グループが全表示なら非表示に、それ以外なら全部非表示にして対象のみ表示
+  const groupAllVisible = props.every(p=>state.propVisible[p]);
+  const others = Object.keys(state.propVisible).filter(p=>!props.includes(p));
+  if(groupAllVisible && others.some(p=>!state.propVisible[p])){
+    // 既にこのグループのみ表示中 → 全表示に戻す
+    for(const k of Object.keys(state.propVisible)) state.propVisible[k]=true;
+  } else if(groupAllVisible){
+    // 全表示中 → このグループ以外を隠す
+    for(const k of Object.keys(state.propVisible)) state.propVisible[k]=props.includes(k);
+  } else {
+    // このグループのみ表示
+    for(const k of Object.keys(state.propVisible)) state.propVisible[k]=props.includes(k);
+  }
+  applyPropVisible();
+}
+function toggleUProp(){
+  // U: キーフレームがあるプロパティのみ表示（なければ全表示に戻す）
+  const hasKf = p => state.keyframes[p] && state.keyframes[p].length > 0;
+  const withKf = ['x','y','s','ax','ay'].filter(hasKf);
+  if(withKf.length === 0){ togglePropGroup([], true); return; }
+  const allMatch = Object.keys(state.propVisible).every(p=>state.propVisible[p]===hasKf(p));
+  if(allMatch){
+    togglePropGroup([], true);
+  } else {
+    for(const k of Object.keys(state.propVisible)) state.propVisible[k]=hasKf(k);
+    applyPropVisible();
+  }
 }
 
 // ── IMPORT ──
@@ -361,6 +483,10 @@ function loadJSON(json){
   $('#btn-export').disabled=false;
   const exp = $('#btn-export-project'); if(exp) exp.disabled=false;
   const send = $('#btn-send-animator'); if(send) send.disabled=false;
+  // ロード後に履歴リセット・初期スナップショット
+  state.history = [cloneEditState()];
+  state.historyIdx = 0;
+  updateUndoButtons();
 }
 
 // ── PROJECT_v1 ペイロード組み立て (exportProject と共通化) ──
@@ -541,7 +667,7 @@ function buildTimeline(cellInfos){
   }
   const lbl=document.querySelector('#track-0 .tl-track-label');
   lbl.innerHTML=`<span class="num">01</span>${(state.project.scene||'CUT_01').toUpperCase()}`;
-  drawRuler(); renderKfDiamonds();
+  drawRuler(); renderKfDiamonds(); renderMarkers();
 }
 
 function renderKfDiamonds(){
@@ -708,14 +834,14 @@ $('#btn-kf-clear').addEventListener('click',clearAllKf);
   $(`#kf-${prop}`).addEventListener('change',()=>{
     if(hasKfAt(prop,state.currentFrame)){
       setKf(prop,state.currentFrame,parseFloat($(`#kf-${prop}`).value)||(prop==='s'?1:0));
-      renderKfDiamonds(); drawCurrentFrame();
+      recordHistory(); renderKfDiamonds(); drawCurrentFrame();
     }
   });
   $(`#dot-${prop}`).addEventListener('click',()=>{
     const f=state.currentFrame;
     if(hasKfAt(prop,f)) removeKf(prop,f);
     else setKf(prop,f,parseFloat($(`#kf-${prop}`).value)||(prop==='s'?1:0));
-    renderKfDiamonds(); drawCurrentFrame();
+    recordHistory(); renderKfDiamonds(); drawCurrentFrame();
   });
 });
 
@@ -739,7 +865,10 @@ anchorHandle.addEventListener('pointermove',e=>{
   setKf('ay',state.currentFrame,Math.round(anchorDragKfStart.ay+(e.clientY-anchorDragStart.py)*sy));
   renderKfDiamonds(); drawCurrentFrame();
 });
-anchorHandle.addEventListener('pointerup',()=>{anchorDragging=false;});
+anchorHandle.addEventListener('pointerup',()=>{
+  if(anchorDragging) recordHistory();
+  anchorDragging=false;
+});
 
 // ビューポートドラッグ（オートキー）
 const vpInner=$('#viewport-inner');
@@ -761,7 +890,10 @@ vpInner.addEventListener('pointermove',e=>{
   setKf('y',state.currentFrame,Math.round(state.vpDragKfStart.y+(e.clientY-state.vpDragStart.py)*sy));
   renderKfDiamonds(); drawCurrentFrame();
 });
-vpInner.addEventListener('pointerup',()=>{state.vpDragging=false;$('#viewport').classList.remove('dragging');});
+vpInner.addEventListener('pointerup',()=>{
+  if(state.vpDragging) recordHistory();
+  state.vpDragging=false; $('#viewport').classList.remove('dragging');
+});
 
 $('#btn-play').addEventListener('click',togglePlay);
 $('#btn-prev').addEventListener('click',()=>{pause();seek(state.currentFrame-1);});
@@ -771,22 +903,35 @@ $('#btn-last').addEventListener('click',()=>{pause();seek(state.totalFrames-1);}
 $('#btn-loop').addEventListener('click',()=>{state.loop=!state.loop;$('#btn-loop').classList.toggle('on',state.loop);});
 
 window.addEventListener('keydown',e=>{
+  // Ctrl+Z / Ctrl+Shift+Z — UNDO/REDO (INPUT中も有効)
+  if(e.ctrlKey && e.code==='KeyZ'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+
   if(e.target.tagName==='INPUT') return;
+
   if(e.code==='Space'){e.preventDefault();togglePlay();}
   else if(e.code==='ArrowLeft'){pause();seek(state.currentFrame-1);}
   else if(e.code==='ArrowRight'){pause();seek(state.currentFrame+1);}
   else if(e.code==='Home'){pause();seek(0);}
   else if(e.code==='End'){pause();seek(state.totalFrames-1);}
+  // M: マーカー追加/削除
   else if(e.code==='KeyM'){
-    // 現在コマにマーカー追加 / 既存があれば削除
     if(!state.project) return;
-    const f = state.currentFrame;
-    const ex = state.markers.findIndex(m=>m.frame===f);
+    const f=state.currentFrame;
+    const ex=state.markers.findIndex(m=>m.frame===f);
     if(ex>=0) state.markers.splice(ex,1);
     else state.markers.push({frame:f, label:''});
     state.markers.sort((a,b)=>a.frame-b.frame);
+    recordHistory(); renderMarkers();
   }
+  // AE ショートカット: P=Position, S=Scale, A=Anchor, U=有KFのみ
+  else if(e.code==='KeyP'){ togglePropGroup(['x','y']); }
+  else if(e.code==='KeyS'){ togglePropGroup(['s']); }
+  else if(e.code==='KeyA'){ togglePropGroup(['ax','ay']); }
+  else if(e.code==='KeyU'){ toggleUProp(); }
 });
+
+$('#btn-undo').addEventListener('click', undo);
+$('#btn-redo').addEventListener('click', redo);
 
 let scrubbing=false;
 function rulerScrub(e){

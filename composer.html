@@ -93,11 +93,11 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
 .tl-frame-block.empty{background:rgba(255,255,255,0.04);background-image:repeating-linear-gradient(45deg,transparent 0,transparent 4px,rgba(255,255,255,0.04) 4px,rgba(255,255,255,0.04) 5px);}
 .tl-frame-block.empty .tl-label{color:rgba(255,255,255,0.4);}
 /* KFダイヤモンド */
-#tl-kf-row{position:absolute;bottom:12px;left:0;right:0;height:10px;pointer-events:none;}
+#tl-kf-row{position:absolute;bottom:12px;left:0;right:0;height:10px;pointer-events:none;z-index:3;}
 .tl-kf-d{position:absolute;width:6px;height:6px;background:var(--neon);transform:translate(-50%,-50%) rotate(45deg);top:50%;pointer-events:all;cursor:pointer;}
 .tl-kf-d:hover{background:var(--acid);}
 /* マーカー */
-#tl-marker-row{position:absolute;bottom:0;left:0;right:0;height:11px;pointer-events:none;}
+#tl-marker-row{position:absolute;bottom:0;left:0;right:0;height:11px;pointer-events:none;z-index:4;}
 .tl-marker{position:absolute;top:0;bottom:0;width:1px;background:rgba(249,255,71,0.8);pointer-events:all;cursor:pointer;transform:translateX(-50%);}
 .tl-marker::after{content:attr(data-label);position:absolute;top:0;left:2px;font-size:7px;color:var(--neon);white-space:nowrap;letter-spacing:0.05em;line-height:11px;pointer-events:none;}
 .tl-marker:hover{background:var(--neon);}
@@ -125,6 +125,24 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
 #export-bar{height:100%;width:0%;background:var(--acid);transition:width 0.08s;}
 
 #file-input{display:none;}
+
+/* FX HUD (FX Console風 浮動パネル) */
+#fx-hud{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.82);border:1px solid rgba(54,255,0,0.45);min-width:200px;z-index:50;display:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(54,255,0,0.06);font-family:var(--mono);font-size:10px;color:var(--white);}
+#fx-hud.show{display:block;}
+#fx-hud-head{display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-bottom:1px solid rgba(54,255,0,0.18);background:linear-gradient(90deg,rgba(54,255,0,0.08),transparent);font-size:8px;letter-spacing:0.32em;color:var(--acid);cursor:move;user-select:none;}
+#fx-hud-close{cursor:pointer;color:rgba(255,255,255,0.4);font-size:11px;line-height:1;padding:0 2px;}
+#fx-hud-close:hover{color:var(--acid);}
+#fx-hud-body{padding:6px 10px 4px;}
+.fx-row{display:flex;align-items:center;gap:8px;padding:3px 0;}
+.fx-row .k{color:rgba(255,255,255,0.45);width:30px;font-size:9px;letter-spacing:0.1em;flex-shrink:0;}
+.fx-row input{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:var(--white);font-family:var(--mono);font-size:11px;width:78px;padding:1px 3px;text-align:right;font-variant-numeric:tabular-nums;}
+.fx-row input:focus{outline:none;border-bottom-color:var(--acid);color:var(--acid);}
+.fx-row .dot{width:9px;height:9px;border:1px solid var(--dim);cursor:pointer;flex-shrink:0;background:transparent;transition:all .1s;}
+.fx-row .dot:hover{border-color:var(--acid);}
+.fx-row .dot.active{background:var(--neon);border-color:var(--neon);}
+.fx-row.prop-hidden{display:none;}
+#fx-hud-meta{padding:5px 10px;border-top:1px solid rgba(255,255,255,0.06);color:rgba(255,255,255,0.32);font-size:8px;letter-spacing:0.18em;display:flex;justify-content:space-between;}
+#fx-hud-meta .acid{color:var(--acid);}
 </style>
 </head>
 <body>
@@ -238,6 +256,18 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
     </div>
   </div>
 
+</div>
+
+<div id="fx-hud">
+  <div id="fx-hud-head"><span>FX HUD / TRANSFORM</span><span id="fx-hud-close" title="閉じる (Esc)">✕</span></div>
+  <div id="fx-hud-body">
+    <div class="fx-row" data-prop="x"><span class="k">X</span><input id="fx-x" type="number" step="1"><div class="dot" id="fx-dot-x"></div></div>
+    <div class="fx-row" data-prop="y"><span class="k">Y</span><input id="fx-y" type="number" step="1"><div class="dot" id="fx-dot-y"></div></div>
+    <div class="fx-row" data-prop="s"><span class="k">SCL</span><input id="fx-s" type="number" step="0.01"><div class="dot" id="fx-dot-s"></div></div>
+    <div class="fx-row" data-prop="ax"><span class="k">AX</span><input id="fx-ax" type="number" step="1"><div class="dot" id="fx-dot-ax"></div></div>
+    <div class="fx-row" data-prop="ay"><span class="k">AY</span><input id="fx-ay" type="number" step="1"><div class="dot" id="fx-dot-ay"></div></div>
+  </div>
+  <div id="fx-hud-meta"><span class="acid" id="fx-hud-frame">F0001</span><span>P / S / A / U / ESC</span></div>
 </div>
 
 <div id="export-overlay">
@@ -380,7 +410,7 @@ function renderMarkers(){
 // ── AE ショートカット プロパティ表示切替 ──
 // groups: P=position(x,y), S=scale(s), A=anchor(ax,ay), U=有KFのみ
 function applyPropVisible(){
-  document.querySelectorAll('.kf-row[data-prop]').forEach(el=>{
+  document.querySelectorAll('.kf-row[data-prop], #fx-hud .fx-row[data-prop]').forEach(el=>{
     const p = el.dataset.prop;
     el.classList.toggle('prop-hidden', !state.propVisible[p]);
   });
@@ -406,6 +436,25 @@ function togglePropGroup(props, all){
   }
   applyPropVisible();
 }
+// ── FX HUD ──
+function showFxHud(){ $('#fx-hud').classList.add('show'); updateFxHud(); }
+function hideFxHud(){ $('#fx-hud').classList.remove('show'); }
+function toggleFxHud(){ $('#fx-hud').classList.contains('show') ? hideFxHud() : showFxHud(); }
+function updateFxHud(){
+  if(!$('#fx-hud').classList.contains('show')) return;
+  const f=state.currentFrame, tr=getTransform(f);
+  $('#fx-x').value  = Math.round(tr.x);
+  $('#fx-y').value  = Math.round(tr.y);
+  $('#fx-s').value  = tr.s.toFixed(3);
+  $('#fx-ax').value = Math.round(tr.ax);
+  $('#fx-ay').value = Math.round(tr.ay);
+  ['x','y','s','ax','ay'].forEach(p=>$(`#fx-dot-${p}`).classList.toggle('active',hasKfAt(p,f)));
+  document.querySelectorAll('#fx-hud .fx-row[data-prop]').forEach(el=>{
+    el.classList.toggle('prop-hidden', !state.propVisible[el.dataset.prop]);
+  });
+  $('#fx-hud-frame').textContent = 'F'+String(f+1).padStart(4,'0');
+}
+
 function toggleUProp(){
   // U: キーフレームがあるプロパティのみ表示（なければ全表示に戻す）
   const hasKf = p => state.keyframes[p] && state.keyframes[p].length > 0;
@@ -639,7 +688,10 @@ function drawCurrentFrame(){
 function buildTimeline(cellInfos){
   const strip=$('#track-strip-0');
   const kfRow=$('#tl-kf-row');
-  strip.innerHTML=''; strip.appendChild(kfRow);
+  const mkRow=$('#tl-marker-row');
+  strip.innerHTML='';
+  strip.appendChild(kfRow);
+  strip.appendChild(mkRow);
   const total=state.totalFrames; if(!total) return;
   for(const c of cellInfos){
     const block=document.createElement('div');
@@ -763,6 +815,7 @@ function updateKfUI(){
   const total=[...state.keyframes.x,...state.keyframes.y,...state.keyframes.s,...state.keyframes.ax,...state.keyframes.ay].length;
   $('#kf-status').textContent=total?`${total} KF`:'NO KF';
   $('#kf-status').style.color=total?'var(--neon)':'rgba(255,255,255,0.3)';
+  updateFxHud();
 }
 function updateTransport(){
   const cur=state.currentFrame,total=state.totalFrames;
@@ -923,11 +976,58 @@ window.addEventListener('keydown',e=>{
     state.markers.sort((a,b)=>a.frame-b.frame);
     recordHistory(); renderMarkers();
   }
-  // AE ショートカット: P=Position, S=Scale, A=Anchor, U=有KFのみ
-  else if(e.code==='KeyP'){ togglePropGroup(['x','y']); }
-  else if(e.code==='KeyS'){ togglePropGroup(['s']); }
-  else if(e.code==='KeyA'){ togglePropGroup(['ax','ay']); }
-  else if(e.code==='KeyU'){ toggleUProp(); }
+  // AE ショートカット: P=Position, S=Scale, A=Anchor, U=有KFのみ。FX HUDも開く。
+  else if(e.code==='KeyP'){ togglePropGroup(['x','y']); showFxHud(); }
+  else if(e.code==='KeyS'){ togglePropGroup(['s']); showFxHud(); }
+  else if(e.code==='KeyA'){ togglePropGroup(['ax','ay']); showFxHud(); }
+  else if(e.code==='KeyU'){ toggleUProp(); showFxHud(); }
+  // ESC: FX HUD を閉じる
+  else if(e.code==='Escape'){ hideFxHud(); }
+  // ` (Backquote): FX HUD トグル
+  else if(e.code==='Backquote'){ toggleFxHud(); }
+});
+
+// ── FX HUD イベント ──
+$('#fx-hud-close').addEventListener('click', hideFxHud);
+
+// FX HUD ドラッグ移動（ヘッダ部）
+(function(){
+  const hud = $('#fx-hud'), head = $('#fx-hud-head');
+  let dragging=false, sx=0, sy=0, ox=0, oy=0;
+  head.addEventListener('pointerdown', e=>{
+    dragging=true;
+    const r = hud.getBoundingClientRect();
+    sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
+    hud.style.left = ox+'px'; hud.style.top = oy+'px';
+    hud.style.transform = 'none';
+    head.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  head.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    hud.style.left = (ox + e.clientX - sx) + 'px';
+    hud.style.top  = (oy + e.clientY - sy) + 'px';
+  });
+  head.addEventListener('pointerup', ()=>{ dragging=false; });
+})();
+
+// FX HUD 入力 (値編集 / dotクリック) — インスペクター側と同一動作
+['x','y','s','ax','ay'].forEach(prop=>{
+  $(`#fx-${prop}`).addEventListener('change',()=>{
+    if(!state.project) return;
+    if(hasKfAt(prop,state.currentFrame)){
+      setKf(prop,state.currentFrame,parseFloat($(`#fx-${prop}`).value)||(prop==='s'?1:0));
+      recordHistory(); renderKfDiamonds(); drawCurrentFrame();
+    }
+  });
+  $(`#fx-dot-${prop}`).addEventListener('click',()=>{
+    if(!state.project) return;
+    const f=state.currentFrame;
+    const v = parseFloat($(`#fx-${prop}`).value)||(prop==='s'?1:0);
+    if(hasKfAt(prop,f)) removeKf(prop,f);
+    else setKf(prop,f,v);
+    recordHistory(); renderKfDiamonds(); drawCurrentFrame();
+  });
 });
 
 $('#btn-undo').addEventListener('click', undo);

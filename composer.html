@@ -134,6 +134,7 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
     </div>
     <div class="g">
       <button id="btn-import" class="primary">IMPORT JSON</button>
+      <button id="btn-export-project" disabled title="PROJECT_v1 JSON (cells + keyframes + markers) を書き出し">EXPORT PROJECT</button>
       <button id="btn-export" disabled>EXPORT 4K PNG</button>
       <input type="file" id="file-input" accept=".json">
     </div>
@@ -151,9 +152,9 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
     </div>
     <div id="empty-state">
       <div class="glyph">+</div>
-      <div class="hint">DRAG ANIMATOR_v1 JSON HERE</div>
+      <div class="hint">DRAG PROJECT_v1 JSON HERE</div>
       <div class="hint" style="opacity:0.6">OR CLICK [IMPORT JSON]</div>
-      <div class="sub">[ ANIMATOR_v1 / NEAREST_NEIGHBOR / 4K_OUTPUT ]</div>
+      <div class="sub">[ PROJECT_v1 / 24FPS / NEAREST / 4K_OUTPUT ]</div>
     </div>
     <div id="drop-overlay"><div class="msg">+ DROP TO LOAD +</div></div>
   </div>
@@ -242,6 +243,11 @@ const state = {
   fps:24, width:0, height:0, bgBright:100,
   isPlaying:false, loop:true, lastTimestamp:0, frameAccumulator:0,
   keyframes:{x:[],y:[],s:[],ax:[],ay:[]},
+  markers: [],            // [{frame, label}] 0-indexed
+  cellsRaw: [],           // インポート時の原本セル配列（往復export用に保持）
+  projectId: null,
+  workArea: null,         // {startFrame, endFrame} or null
+  frameLayerMeta: null,   // {visible, opacity, image} 往復用
   vpDragging:false, vpDragStart:null, vpDragKfStart:null,
 };
 
@@ -292,26 +298,114 @@ function clearAllKf(){
 
 // ── IMPORT ──
 function loadJSON(json){
-  if(json.format!=='ANIMATOR_v1'){alert('Unsupported: '+json.format);return;}
-  state.project=json; state.fps=json.fps||24;
+  // PROJECT_v1 (cells) / 旧 ANIMATOR_v1 (frames) を両対応
+  const cellList = Array.isArray(json.cells) ? json.cells
+                 : Array.isArray(json.frames) ? json.frames : null;
+  const isProjectV1 = json.format === 'PROJECT_v1';
+  const isAnimatorV1 = json.format === 'ANIMATOR_v1';
+  if(!isProjectV1 && !isAnimatorV1){
+    if(!confirm('未知のフォーマットです。読み込みを試みますか？\n format='+json.format)) return;
+  }
+  if(!cellList || !cellList.length){ alert('cells/frames が空です'); return; }
+
+  state.project=json; state.fps=24;
   state.width=json.width; state.height=json.height;
   state.bgBright=json.bgBright??100;
+  state.projectId = json.projectId || null;
+  state.frameLayerMeta = (json.frameLayer && typeof json.frameLayer === 'object') ? json.frameLayer : null;
   state.keyframes={x:[],y:[],s:[],ax:[],ay:[]};
+  state.markers=[];
   state.frames=[];
+  state.cellsRaw = cellList.slice();
   const cellInfos=[]; let ci=0;
-  for(const cell of json.frames){
+  for(const cell of cellList){
     const dur=cell.duration||1,isEmpty=cell.kind==='empty',hidden=cell.hidden===true;
     let img=null;
     if(!isEmpty&&!hidden&&cell.image){img=new Image();img.src=cell.image;}
-    cellInfos.push({cellIdx:ci,kind:cell.kind,duration:dur,hidden,startFrame:state.frames.length,image:img});
+    cellInfos.push({cellIdx:ci,cellId:cell.id||null,kind:cell.kind,duration:dur,hidden,startFrame:state.frames.length,image:img});
     for(let i=0;i<dur;i++) state.frames.push({kind:cell.kind,hidden,image:img,srcCellIndex:ci,cellOffset:i});
     ci++;
   }
-  state.totalFrames=state.frames.length; state.currentFrame=0;
+  state.totalFrames=state.frames.length;
+  // workArea
+  if(json.workArea && typeof json.workArea === 'object'){
+    const s = Math.max(0, Math.min(state.totalFrames, json.workArea.startFrame|0));
+    const e = Math.max(s, Math.min(state.totalFrames, json.workArea.endFrame|0));
+    state.workArea = {startFrame:s, endFrame:e};
+  } else {
+    state.workArea = null;
+  }
+  // composer セクション復元（keyframes / markers）
+  if(isProjectV1 && json.composer && typeof json.composer === 'object'){
+    const kf = json.composer.keyframes || {};
+    for(const p of ['x','y','s','ax','ay']){
+      if(Array.isArray(kf[p])){
+        state.keyframes[p] = kf[p]
+          .filter(k => typeof k.frame === 'number' && typeof k.v === 'number')
+          .map(k => ({f: k.frame|0, v: k.v}))
+          .sort((a,b)=>a.f-b.f);
+      }
+    }
+    if(Array.isArray(json.composer.markers)){
+      state.markers = json.composer.markers
+        .filter(m => typeof m.frame === 'number')
+        .map(m => ({frame:m.frame|0, label:String(m.label||'')}));
+    }
+  }
+  state.currentFrame=0;
   setupViewport(); buildTimeline(cellInfos);
   updateInspector(); updateKfUI(); drawCurrentFrame(); updateTransport();
   $('#empty-state').style.display='none';
   $('#btn-export').disabled=false;
+  const exp = $('#btn-export-project'); if(exp) exp.disabled=false;
+}
+
+// ── EXPORT PROJECT (PROJECT_v1 往復) ──
+function exportProject(){
+  if(!state.project){ alert('プロジェクト未読込'); return; }
+  // cells: importで保持した cellsRaw をそのまま転記（image 含む）
+  const cells = state.cellsRaw.map(c => {
+    if(c.kind === 'empty'){
+      return { id: c.id, kind: 'empty', duration: c.duration|0 };
+    }
+    return {
+      id: c.id,
+      kind: 'draw',
+      duration: c.duration|0,
+      hidden: !!c.hidden,
+      image: c.image || null,
+    };
+  });
+  const out = {
+    format: 'PROJECT_v1',
+    projectId: state.projectId || ('p_' + Date.now().toString(36)),
+    exportedAt: new Date().toISOString(),
+    fps: 24,
+    durationUnit: 'frames',
+    width: state.width,
+    height: state.height,
+    bgBright: state.bgBright,
+    workArea: state.workArea || { startFrame: 0, endFrame: state.totalFrames },
+    frameLayer: state.frameLayerMeta || null,
+    cellCount: cells.length,
+    cells,
+    composer: {
+      keyframes: {
+        x:  state.keyframes.x .map(k=>({frame:k.f, v:k.v})),
+        y:  state.keyframes.y .map(k=>({frame:k.f, v:k.v})),
+        s:  state.keyframes.s .map(k=>({frame:k.f, v:k.v})),
+        ax: state.keyframes.ax.map(k=>({frame:k.f, v:k.v})),
+        ay: state.keyframes.ay.map(k=>({frame:k.f, v:k.v})),
+      },
+      markers: state.markers.map(m=>({frame:m.frame, label:m.label||''})),
+    },
+  };
+  const blob = new Blob([JSON.stringify(out)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href = url; a.download = `project_${ts}.json`; a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── VIEWPORT ──
@@ -538,6 +632,7 @@ $('#file-input').addEventListener('change',async e=>{
   e.target.value='';
 });
 $('#btn-export').addEventListener('click',exportPNG);
+$('#btn-export-project').addEventListener('click',exportProject);
 $('#btn-kf-add').addEventListener('click',addKfAtCurrent);
 $('#btn-kf-clear').addEventListener('click',clearAllKf);
 
@@ -614,6 +709,15 @@ window.addEventListener('keydown',e=>{
   else if(e.code==='ArrowRight'){pause();seek(state.currentFrame+1);}
   else if(e.code==='Home'){pause();seek(0);}
   else if(e.code==='End'){pause();seek(state.totalFrames-1);}
+  else if(e.code==='KeyM'){
+    // 現在コマにマーカー追加 / 既存があれば削除
+    if(!state.project) return;
+    const f = state.currentFrame;
+    const ex = state.markers.findIndex(m=>m.frame===f);
+    if(ex>=0) state.markers.splice(ex,1);
+    else state.markers.push({frame:f, label:''});
+    state.markers.sort((a,b)=>a.frame-b.frame);
+  }
 });
 
 let scrubbing=false;

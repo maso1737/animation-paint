@@ -1265,6 +1265,11 @@ const state = {
     opacity: 0.4,    // 0..1
     editMode: false, // true = 描画ターゲットがframeLayerになる
   },
+  // COMPOSER から戻ってきた追記データ（keyframes/markers）。再exportで保持。
+  // shape: { keyframes:{x:[],y:[],s:[],ax:[],ay:[]}, markers:[{frame,label}] }
+  composerData: null,
+  // プロジェクトID（PROJECT_v1 連携用、起動時に生成）
+  projectId: null,
 };
 
 // ============================================================
@@ -3312,16 +3317,23 @@ document.getElementById('btn-export').title = 'クリック: 4K書き出し / Sh
 // ============================================================
 // JSON EXPORT / IMPORT (COMPOSER 連携)
 // ============================================================
-// フォーマット ANIMATOR_v1
+// フォーマット PROJECT_v1（推奨）
 //   {
-//     format: "ANIMATOR_v1",
-//     exportedAt: ISO,
-//     fps, width, height, bgBright,
-//     frames: [
-//       { kind:'draw', duration, hidden, image:'data:image/png;base64,...' },
-//       { kind:'empty', duration }
-//     ]
+//     format: "PROJECT_v1",
+//     projectId, exportedAt: ISO,
+//     fps: 24, width, height, bgBright,
+//     workArea: { startFrame, endFrame },   // 0-indexed (内部基準)
+//     frameLayer: { visible, opacity, image },
+//     cells: [
+//       { id, kind:'draw', duration, hidden, image:'data:image/png;base64,...' },
+//       { id, kind:'empty', duration }
+//     ],
+//     composer: {                           // COMPOSER が追記、ANIMATOR は保持して再export
+//       keyframes: { x:[{frame,v}], y:[], s:[], ax:[], ay:[] },  // frame は 0-indexed
+//       markers:   [{ frame, label }]
+//     }
 //   }
+// 旧 ANIMATOR_v1 (frames配列・id無し) も読み込み可能（後方互換）。
 // 画像はキャンバス内部解像度(2048x1152)のBG透明PNG。COMPOSER側で4Kへnearest拡大。
 function frameToPNGDataURL(frame){
   if(!frame || frame.kind !== 'draw' || !frame.drawData) return null;
@@ -3337,42 +3349,56 @@ function frameToPNGDataURL(frame){
   return c.toDataURL('image/png');
 }
 
+function ensureProjectId(){
+  if(!state.projectId){
+    state.projectId = (crypto.randomUUID && crypto.randomUUID()) ||
+      ('p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,10));
+  }
+  return state.projectId;
+}
+
 function exportJSON(){
   const cur = curFrame();
   if(cur) syncFrameFromCanvas(cur); // 最新の編集中フレームを取り込む
   const out = {
-    format: 'ANIMATOR_v1',
+    format: 'PROJECT_v1',
+    projectId: ensureProjectId(),
     exportedAt: new Date().toISOString(),
-    fps: state.fps,
-    durationUnit: 'frames', // duration はコマ数。秒 = duration / fps
+    fps: 24,
+    durationUnit: 'frames',
     width: CFG.WORK_W,
     height: CFG.WORK_H,
     bgBright: state.bgBright,
-    // FRAMEレイヤー: 全コマ共通の参考レイヤー (COMPOSER側で表示する場合あり)
+    workArea: {
+      startFrame: state.workStart,
+      endFrame: state.workEnd,
+    },
     frameLayer: {
       visible: state.frameLayer.visible,
       opacity: state.frameLayer.opacity,
       image: frameLayerToPNGDataURL(),
     },
-    frameCount: state.frames.length,
-    frames: state.frames.map(f => {
+    cellCount: state.frames.length,
+    cells: state.frames.map(f => {
       if(f.kind === 'empty'){
-        return { kind: 'empty', duration: f.duration };
+        return { id: f.id, kind: 'empty', duration: f.duration };
       }
       return {
+        id: f.id,
         kind: 'draw',
         duration: f.duration,
         hidden: !!f.hidden,
         image: frameToPNGDataURL(f),
       };
     }),
+    composer: state.composerData || null,
   };
   const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   a.href = url;
-  a.download = `animator_${ts}.json`;
+  a.download = `project_${ts}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -3406,10 +3432,15 @@ async function importJSON(file){
     alert('JSONの解析に失敗しました: ' + e.message);
     return;
   }
-  if(json.format !== 'ANIMATOR_v1'){
+  // PROJECT_v1 (cells) / 旧 ANIMATOR_v1 (frames) を両対応
+  const cellList = Array.isArray(json.cells) ? json.cells
+                 : Array.isArray(json.frames) ? json.frames : null;
+  const isProjectV1 = json.format === 'PROJECT_v1';
+  const isAnimatorV1 = json.format === 'ANIMATOR_v1';
+  if(!isProjectV1 && !isAnimatorV1){
     if(!confirm('未知のフォーマットです。読み込みを試みますか？')) return;
   }
-  if(!Array.isArray(json.frames) || json.frames.length === 0){
+  if(!cellList || cellList.length === 0){
     alert('フレームが含まれていません');
     return;
   }
@@ -3417,17 +3448,19 @@ async function importJSON(file){
 
   // 新しいフレーム配列を構築
   const newFrames = [];
-  for(const fj of json.frames){
+  for(const fj of cellList){
     if(fj.kind === 'empty'){
       const ef = createBlankFrame();
       ef.kind = 'empty';
       ef.drawData = null;
       ef.duration = Math.max(1, fj.duration | 0);
+      if(fj.id) ef.id = fj.id;
       newFrames.push(ef);
     } else {
       const f = createBlankFrame();
       f.duration = Math.max(1, fj.duration | 0);
       f.hidden = !!fj.hidden;
+      if(fj.id) f.id = fj.id;
       if(fj.image){
         try{
           f.drawData = await loadImageToDrawData(fj.image);
@@ -3457,8 +3490,19 @@ async function importJSON(file){
   if(typeof json.bgBright === 'number'){
     setBgBright(json.bgBright);
   }
-  state.workStart = 0;
-  state.workEnd = totalTicks();
+  // workArea 復元（PROJECT_v1）
+  const total = totalTicks();
+  if(json.workArea && typeof json.workArea === 'object'){
+    state.workStart = Math.max(0, Math.min(total, json.workArea.startFrame | 0));
+    state.workEnd   = Math.max(state.workStart, Math.min(total, json.workArea.endFrame | 0));
+    if(state.workEnd <= state.workStart) state.workEnd = total;
+  } else {
+    state.workStart = 0;
+    state.workEnd = total;
+  }
+  // projectId / composer セクション保持
+  if(typeof json.projectId === 'string') state.projectId = json.projectId;
+  state.composerData = (json.composer && typeof json.composer === 'object') ? json.composer : null;
   loadFrameToCanvas(curFrame());
   buildStrip();
   updateDurInfo();

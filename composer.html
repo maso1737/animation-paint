@@ -434,6 +434,24 @@ async function exGet(id){
     r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);
   });
 }
+async function exCleanup(maxAgeMs = 24*60*60*1000){
+  try{
+    const _db = await exOpenDB();
+    const all = await new Promise((res,rej)=>{
+      const tx = _db.transaction(EX_STORE,'readonly');
+      const r = tx.objectStore(EX_STORE).getAll();
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    });
+    const cutoff = Date.now() - maxAgeMs;
+    const stale = all.filter(rec => new Date(rec.exportedAt||0).getTime() < cutoff);
+    if(!stale.length) return;
+    const _db2 = await exOpenDB();
+    const tx2 = _db2.transaction(EX_STORE,'readwrite');
+    const st = tx2.objectStore(EX_STORE);
+    stale.forEach(rec => st.delete(rec.projectId));
+    console.log(`[exchange] cleaned ${stale.length} stale project(s)`);
+  }catch(e){ /* silent */ }
+}
 
 // ── VIEWPORT ──
 function setupViewport(){
@@ -670,8 +688,9 @@ $('#btn-send-animator').addEventListener('click', async () => {
 });
 $('#btn-home').addEventListener('click', () => { location.href = 'index.html'; });
 
-// URL ?id=xxx で来た場合、EXCHANGE DB から自動読込
+// URL ?id=xxx で来た場合、EXCHANGE DB から自動読込（起動時に古いレコードも削除）
 (async () => {
+  exCleanup();
   const urlId = new URLSearchParams(location.search).get('id');
   if(!urlId) return;
   try{

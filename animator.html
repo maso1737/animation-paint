@@ -3564,6 +3564,24 @@ async function exGet(id){
     r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);
   });
 }
+async function exCleanup(maxAgeMs = 24*60*60*1000){
+  try{
+    const _db = await exOpenDB();
+    const all = await new Promise((res,rej)=>{
+      const tx = _db.transaction(EX_STORE,'readonly');
+      const r = tx.objectStore(EX_STORE).getAll();
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    });
+    const cutoff = Date.now() - maxAgeMs;
+    const stale = all.filter(rec => new Date(rec.exportedAt||0).getTime() < cutoff);
+    if(!stale.length) return;
+    const _db2 = await exOpenDB();
+    const tx2 = _db2.transaction(EX_STORE,'readwrite');
+    const st = tx2.objectStore(EX_STORE);
+    stale.forEach(rec => st.delete(rec.projectId));
+    console.log(`[exchange] cleaned ${stale.length} stale project(s)`);
+  }catch(e){ /* silent */ }
+}
 
 function buildProjectPayload(){
   const cur = curFrame();
@@ -4530,6 +4548,8 @@ window.addEventListener('resize', () => {
   setupCursorScrub();
   try{
     db = await openDB();
+    // 起動時に古い exchange レコードを削除（バックグラウンド）
+    exCleanup();
     // URL ?id=xxx で来た場合は EXCHANGE DB から受信して上書き読込
     const urlId = new URLSearchParams(location.search).get('id');
     let loadedFromExchange = false;

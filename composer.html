@@ -136,6 +136,8 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
       <button id="btn-import" class="primary">IMPORT JSON</button>
       <button id="btn-export-project" disabled title="PROJECT_v1 JSON (cells + keyframes + markers) を書き出し">EXPORT PROJECT</button>
       <button id="btn-export" disabled>EXPORT 4K PNG</button>
+      <button id="btn-send-animator" disabled title="現在のプロジェクトを共有DB経由でANIMATORに戻す">→ ANIMATOR</button>
+      <button id="btn-home" title="ランディングページに戻る">HOME</button>
       <input type="file" id="file-input" accept=".json">
     </div>
   </div>
@@ -358,32 +360,21 @@ function loadJSON(json){
   $('#empty-state').style.display='none';
   $('#btn-export').disabled=false;
   const exp = $('#btn-export-project'); if(exp) exp.disabled=false;
+  const send = $('#btn-send-animator'); if(send) send.disabled=false;
 }
 
-// ── EXPORT PROJECT (PROJECT_v1 往復) ──
-function exportProject(){
-  if(!state.project){ alert('プロジェクト未読込'); return; }
-  // cells: importで保持した cellsRaw をそのまま転記（image 含む）
-  const cells = state.cellsRaw.map(c => {
-    if(c.kind === 'empty'){
-      return { id: c.id, kind: 'empty', duration: c.duration|0 };
-    }
-    return {
-      id: c.id,
-      kind: 'draw',
-      duration: c.duration|0,
-      hidden: !!c.hidden,
-      image: c.image || null,
-    };
-  });
-  const out = {
+// ── PROJECT_v1 ペイロード組み立て (exportProject と共通化) ──
+function buildProjectPayload(){
+  const cells = state.cellsRaw.map(c => c.kind === 'empty'
+    ? { id: c.id, kind: 'empty', duration: c.duration|0 }
+    : { id: c.id, kind: 'draw', duration: c.duration|0, hidden: !!c.hidden, image: c.image || null }
+  );
+  return {
     format: 'PROJECT_v1',
     projectId: state.projectId || ('p_' + Date.now().toString(36)),
     exportedAt: new Date().toISOString(),
-    fps: 24,
-    durationUnit: 'frames',
-    width: state.width,
-    height: state.height,
+    fps: 24, durationUnit: 'frames',
+    width: state.width, height: state.height,
     bgBright: state.bgBright,
     workArea: state.workArea || { startFrame: 0, endFrame: state.totalFrames },
     frameLayer: state.frameLayerMeta || null,
@@ -400,12 +391,48 @@ function exportProject(){
       markers: state.markers.map(m=>({frame:m.frame, label:m.label||''})),
     },
   };
+}
+
+// ── EXPORT PROJECT (PROJECT_v1 ファイル書き出し) ──
+function exportProject(){
+  if(!state.project){ alert('プロジェクト未読込'); return; }
+  const out = buildProjectPayload();
   const blob = new Blob([JSON.stringify(out)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   a.href = url; a.download = `project_${ts}.json`; a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── EXCHANGE DB (両アプリ共有 / Phase 2.2) ──
+const EX_DB = 'tdr_exchange', EX_STORE = 'projects', EX_VERSION = 1;
+function exOpenDB(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open(EX_DB, EX_VERSION);
+    r.onupgradeneeded = e => {
+      const _db = e.target.result;
+      if(!_db.objectStoreNames.contains(EX_STORE)) _db.createObjectStore(EX_STORE, {keyPath:'projectId'});
+    };
+    r.onsuccess = e=>res(e.target.result);
+    r.onerror = e=>rej(e.target.error);
+  });
+}
+async function exPut(record){
+  const _db = await exOpenDB();
+  return new Promise((res,rej)=>{
+    const tx = _db.transaction(EX_STORE,'readwrite');
+    tx.objectStore(EX_STORE).put(record);
+    tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
+  });
+}
+async function exGet(id){
+  const _db = await exOpenDB();
+  return new Promise((res,rej)=>{
+    const tx = _db.transaction(EX_STORE,'readonly');
+    const r = tx.objectStore(EX_STORE).get(id);
+    r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);
+  });
 }
 
 // ── VIEWPORT ──
@@ -633,6 +660,28 @@ $('#file-input').addEventListener('change',async e=>{
 });
 $('#btn-export').addEventListener('click',exportPNG);
 $('#btn-export-project').addEventListener('click',exportProject);
+$('#btn-send-animator').addEventListener('click', async () => {
+  if(!state.project){ alert('プロジェクト未読込'); return; }
+  try{
+    const payload = buildProjectPayload();
+    await exPut(payload);
+    location.href = 'animator.html?id=' + encodeURIComponent(payload.projectId);
+  }catch(err){ alert('ANIMATORへの送信に失敗: ' + err.message); }
+});
+$('#btn-home').addEventListener('click', () => { location.href = 'index.html'; });
+
+// URL ?id=xxx で来た場合、EXCHANGE DB から自動読込
+(async () => {
+  const urlId = new URLSearchParams(location.search).get('id');
+  if(!urlId) return;
+  try{
+    const rec = await exGet(urlId);
+    if(rec){
+      loadJSON(rec);
+      history.replaceState(null,'','composer.html');
+    }
+  }catch(e){ console.warn('exchange load failed', e); }
+})();
 $('#btn-kf-add').addEventListener('click',addKfAtCurrent);
 $('#btn-kf-clear').addEventListener('click',clearAllKf);
 

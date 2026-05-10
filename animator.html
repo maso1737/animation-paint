@@ -933,6 +933,9 @@ input[type=range]::-moz-range-thumb{
       <button id="btn-export-json" title="全フレームをJSONで書き出し（COMPOSER連携用）">EXPORT JSON</button>
       <button id="btn-import-json" title="JSONファイルを読み込み（既存プロジェクトを置換）">IMPORT JSON</button>
       <input type="file" id="json-file-input" accept="application/json,.json" style="display:none;">
+      <span class="sep">/</span>
+      <button id="btn-send-composer" title="現在のプロジェクトを共有DB経由でCOMPOSERに送る">→ COMPOSER</button>
+      <button id="btn-home" title="ランディングページに戻る">HOME</button>
     </div>
   </div>
 
@@ -3423,29 +3426,13 @@ function loadImageToDrawData(dataURL){
   });
 }
 
-async function importJSON(file){
-  if(!file) return;
-  let json;
-  try{
-    json = JSON.parse(await file.text());
-  } catch(e){
-    alert('JSONの解析に失敗しました: ' + e.message);
-    return;
-  }
+async function applyProjectJSON(json){
   // PROJECT_v1 (cells) / 旧 ANIMATOR_v1 (frames) を両対応
   const cellList = Array.isArray(json.cells) ? json.cells
                  : Array.isArray(json.frames) ? json.frames : null;
-  const isProjectV1 = json.format === 'PROJECT_v1';
-  const isAnimatorV1 = json.format === 'ANIMATOR_v1';
-  if(!isProjectV1 && !isAnimatorV1){
-    if(!confirm('未知のフォーマットです。読み込みを試みますか？')) return;
-  }
   if(!cellList || cellList.length === 0){
-    alert('フレームが含まれていません');
-    return;
+    alert('フレームが含まれていません'); return;
   }
-  if(!confirm('現在のプロジェクトを上書きします。よろしいですか？')) return;
-
   // 新しいフレーム配列を構築
   const newFrames = [];
   for(const fj of cellList){
@@ -3523,13 +3510,97 @@ async function importJSON(file){
   pushTimelineHistory();
 }
 
+async function importJSON(file){
+  if(!file) return;
+  let json;
+  try{ json = JSON.parse(await file.text()); }
+  catch(e){ alert('JSONの解析に失敗しました: ' + e.message); return; }
+  const isProjectV1 = json.format === 'PROJECT_v1';
+  const isAnimatorV1 = json.format === 'ANIMATOR_v1';
+  if(!isProjectV1 && !isAnimatorV1){
+    if(!confirm('未知のフォーマットです。読み込みを試みますか？')) return;
+  }
+  if(!confirm('現在のプロジェクトを上書きします。よろしいですか？')) return;
+  await applyProjectJSON(json);
+}
+
 document.getElementById('btn-import-json').addEventListener('click', () => {
   document.getElementById('json-file-input').click();
 });
 document.getElementById('json-file-input').addEventListener('change', async e => {
   const file = e.target.files && e.target.files[0];
-  e.target.value = ''; // 同じファイルを連続選択できるようリセット
+  e.target.value = '';
   if(file) await importJSON(file);
+});
+
+// ============================================================
+// EXCHANGE DB (両アプリ共有のクリップボードDB / Phase 2.2)
+// ============================================================
+const EX_DB = 'tdr_exchange', EX_STORE = 'projects', EX_VERSION = 1;
+function exOpenDB(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open(EX_DB, EX_VERSION);
+    r.onupgradeneeded = e => {
+      const _db = e.target.result;
+      if(!_db.objectStoreNames.contains(EX_STORE)) _db.createObjectStore(EX_STORE, {keyPath:'projectId'});
+    };
+    r.onsuccess = e=>res(e.target.result);
+    r.onerror = e=>rej(e.target.error);
+  });
+}
+async function exPut(record){
+  const _db = await exOpenDB();
+  return new Promise((res,rej)=>{
+    const tx = _db.transaction(EX_STORE,'readwrite');
+    tx.objectStore(EX_STORE).put(record);
+    tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
+  });
+}
+async function exGet(id){
+  const _db = await exOpenDB();
+  return new Promise((res,rej)=>{
+    const tx = _db.transaction(EX_STORE,'readonly');
+    const r = tx.objectStore(EX_STORE).get(id);
+    r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);
+  });
+}
+
+function buildProjectPayload(){
+  const cur = curFrame();
+  if(cur) syncFrameFromCanvas(cur);
+  return {
+    format: 'PROJECT_v1',
+    projectId: ensureProjectId(),
+    exportedAt: new Date().toISOString(),
+    fps: 24, durationUnit: 'frames',
+    width: CFG.WORK_W, height: CFG.WORK_H,
+    bgBright: state.bgBright,
+    workArea: { startFrame: state.workStart, endFrame: state.workEnd },
+    frameLayer: {
+      visible: state.frameLayer.visible,
+      opacity: state.frameLayer.opacity,
+      image: frameLayerToPNGDataURL(),
+    },
+    cellCount: state.frames.length,
+    cells: state.frames.map(f => f.kind === 'empty'
+      ? { id: f.id, kind: 'empty', duration: f.duration }
+      : { id: f.id, kind: 'draw', duration: f.duration, hidden: !!f.hidden, image: frameToPNGDataURL(f) }
+    ),
+    composer: state.composerData || null,
+  };
+}
+
+document.getElementById('btn-send-composer').addEventListener('click', async () => {
+  try{
+    const payload = buildProjectPayload();
+    await exPut(payload);
+    location.href = 'composer.html?id=' + encodeURIComponent(payload.projectId);
+  }catch(err){
+    alert('COMPOSERへの送信に失敗: ' + err.message);
+  }
+});
+document.getElementById('btn-home').addEventListener('click', () => {
+  location.href = 'index.html';
 });
 
 function exportPNG(opts){
@@ -4459,12 +4530,27 @@ window.addEventListener('resize', () => {
   setupCursorScrub();
   try{
     db = await openDB();
-    const loaded = await loadProject();
-    if(!loaded){
-      // 初回起動: 空のフレーム1つから始める
-      state.frames = [createBlankFrame()];
-      state.currentFrame = 0;
-      state.pendingSaveFrames.add(state.frames[0].id);
+    // URL ?id=xxx で来た場合は EXCHANGE DB から受信して上書き読込
+    const urlId = new URLSearchParams(location.search).get('id');
+    let loadedFromExchange = false;
+    if(urlId){
+      try{
+        const rec = await exGet(urlId);
+        if(rec){
+          await applyProjectJSON(rec);
+          loadedFromExchange = true;
+          // URLからidパラメータを除去（再読込時に二重適用しないため）
+          history.replaceState(null,'','animator.html');
+        }
+      }catch(e){ console.warn('exchange load failed', e); }
+    }
+    if(!loadedFromExchange){
+      const loaded = await loadProject();
+      if(!loaded){
+        state.frames = [createBlankFrame()];
+        state.currentFrame = 0;
+        state.pendingSaveFrames.add(state.frames[0].id);
+      }
     }
   }catch(err){
     console.warn('IndexedDB unavailable:', err);

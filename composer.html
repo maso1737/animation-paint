@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>COMPOSER v0.3</title>
+<title>COMPOSER v0.5</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
@@ -77,11 +77,11 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
 #tl-ruler{position:relative;border-bottom:1px solid var(--border);background:var(--panel2);cursor:pointer;overflow:hidden;padding-left:154px;box-sizing:border-box;}
 #tl-ruler-canvas{display:block;width:100%;height:100%;}
 #tl-tracks{position:relative;overflow-y:auto;overflow-x:hidden;}
-.tl-track{position:relative;height:54px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding-left:14px;cursor:pointer;transition:background 0.1s;}
+.tl-track{position:relative;height:var(--track-h,54px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding-left:14px;cursor:pointer;transition:background 0.1s;}
 .tl-track:hover{background:rgba(255,255,255,0.02);}
 .tl-track.selected{background:rgba(54,255,0,0.04);}
 .tl-track.selected .tl-track-name{color:var(--acid);}
-.tl-track-label{width:140px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding-right:6px;overflow:hidden;}
+.tl-track-label{width:128px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding-right:6px;overflow:hidden;}
 .tl-track-name{font-size:9px;letter-spacing:0.1em;color:rgba(255,255,255,0.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tl-track-name .num{color:var(--acid);margin-right:4px;}
 .tl-track-btns{display:flex;gap:3px;}
@@ -115,6 +115,41 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
 #tl-playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--acid);pointer-events:none;z-index:5;box-shadow:0 0 6px rgba(54,255,0,0.5);}
 #tl-playhead::before{content:'';position:absolute;top:0;left:-4px;width:9px;height:6px;background:var(--acid);}
 .kf-row.prop-hidden{display:none;}
+
+/* DRAG HANDLE */
+.tl-drag-handle{width:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:grab;color:rgba(255,255,255,0.15);font-size:11px;letter-spacing:-2px;user-select:none;transition:color .1s;}
+.tl-drag-handle:hover{color:rgba(54,255,0,0.5);}
+.tl-drag-handle:active{cursor:grabbing;}
+#tl-drop-indicator{position:absolute;left:0;right:0;height:2px;background:var(--acid);pointer-events:none;z-index:10;display:none;box-shadow:0 0 6px rgba(54,255,0,0.6);}
+.tl-drag-ghost{position:fixed;pointer-events:none;z-index:1000;opacity:0.8;border:1px solid rgba(54,255,0,0.55);background:rgba(6,6,6,0.96);display:flex;align-items:center;}
+
+/* SCRUB CURSOR */
+.fx-row .k{cursor:ew-resize;}
+.kf-row .k{cursor:ew-resize;}
+
+/* SOLO */
+.tl-tbtn.solo{color:rgba(249,255,71,0.45);}
+.tl-tbtn.solo:hover{color:var(--neon);border-color:rgba(249,255,71,0.5);}
+.tl-tbtn.solo.on{color:var(--neon);border-color:var(--neon);background:rgba(249,255,71,0.08);}
+.tl-track.soloed-off{opacity:0.28;}
+
+/* AUDIO TRACK */
+#tl-audio-row{position:relative;height:48px;border-top:1px solid rgba(249,255,71,0.12);display:none;align-items:center;padding-left:14px;background:rgba(249,255,71,0.015);flex-shrink:0;}
+#tl-audio-row.show{display:flex;}
+#tl-audio-label{width:128px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;gap:3px;padding-right:6px;}
+.tl-audio-icon{width:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(249,255,71,0.4);}
+.tl-audio-name{font-size:8px;letter-spacing:.1em;color:rgba(249,255,71,0.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;}
+.tl-audio-btns{display:flex;gap:3px;}
+.tl-audio-btn{background:transparent;border:1px solid var(--border);color:rgba(255,255,255,0.4);font-family:var(--mono);font-size:7px;letter-spacing:.05em;padding:1px 4px;cursor:pointer;line-height:1.4;}
+.tl-audio-btn:hover{border-color:rgba(249,255,71,0.4);color:var(--neon);}
+.tl-audio-btn.muted{color:rgba(255,255,255,0.18);border-style:dashed;}
+.tl-audio-btn.del:hover{color:#ff4444;border-color:rgba(255,68,68,0.4);}
+#tl-audio-strip{flex:1;position:relative;height:36px;overflow:hidden;cursor:ew-resize;}
+#tl-audio-canvas{display:block;width:100%;height:100%;}
+#tl-audio-offset{position:absolute;top:2px;right:4px;font-size:7px;letter-spacing:.08em;color:rgba(249,255,71,0.45);pointer-events:none;}
+#btn-load-audio{border-color:rgba(249,255,71,0.35);color:rgba(249,255,71,0.6);}
+#btn-load-audio:hover{border-color:var(--neon);color:var(--neon);background:rgba(249,255,71,0.05);}
+#audio-file-input{display:none;}
 
 /* TRANSPORT */
 #transport{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--panel);border-top:1px solid var(--border);font-size:9px;letter-spacing:0.2em;}
@@ -162,7 +197,7 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
     <div class="g">
       <span class="title">COMPOSER</span>
       <span style="color:var(--dim)">/</span>
-      <span class="meta">v0.3 — MULTI-TRACK</span>
+      <span class="meta">v0.5 — MULTI-TRACK</span>
     </div>
     <div class="g">
       <span class="meta" id="proj-meta">— NO PROJECT —</span>
@@ -172,8 +207,10 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
       <button id="btn-add-track">+ TRACK</button>
       <button id="btn-export-project" disabled>EXPORT PROJECT</button>
       <button id="btn-export" disabled>EXPORT 4K PNG</button>
+      <button id="btn-load-audio" title="BGM/SE音声ファイルを読み込む">♪ AUDIO</button>
       <button id="btn-home" title="ランディングページに戻る">HOME</button>
       <input type="file" id="file-input" accept=".json">
+      <input type="file" id="audio-file-input" accept="audio/*">
     </div>
   </div>
 
@@ -241,7 +278,22 @@ html,body{width:100%;height:100%;background:var(--black);color:var(--white);font
       <div id="tl-wa-out" class="tl-wa-handle" title="ワークエリア終了 (N)"></div>
       <div id="tl-playhead" style="left:154px"></div>
     </div>
-    <div id="tl-tracks"></div>
+    <div id="tl-tracks">
+      <div id="tl-audio-row">
+        <div class="tl-audio-icon">♪</div>
+        <div id="tl-audio-label">
+          <div class="tl-audio-name" id="tl-audio-name">NO AUDIO</div>
+          <div class="tl-audio-btns">
+            <button class="tl-audio-btn" id="btn-audio-mute" title="ミュート">◉</button>
+            <button class="tl-audio-btn del" id="btn-audio-remove" title="削除">✕</button>
+          </div>
+        </div>
+        <div id="tl-audio-strip">
+          <canvas id="tl-audio-canvas"></canvas>
+          <div id="tl-audio-offset">OFF:+0f</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="transport">
@@ -307,6 +359,13 @@ const state = {
 };
 
 let fileInputMode = 'import'; // 'import' | 'add'
+
+// ── AUDIO STATE ──
+const audio = {
+  ctx: null, buffer: null, source: null, gainNode: null,
+  offsetFrames: 0, muted: false, fileName: '', waveform: null,
+  _dragActive: false, _dragStartX: 0, _dragStartOffset: 0,
+};
 
 const $ = s => document.querySelector(s);
 const canvas = $('#preview-canvas');
@@ -489,6 +548,7 @@ function parseTrackFromJSON(json){
     keyframes: makeEmptyKfs(),
     markers: [],
     visible: true,
+    solo: false,
   };
   let fi=0;
   for(let ci=0;ci<cellList.length;ci++){
@@ -612,6 +672,99 @@ function removeTrack(idx){
   recordHistory();
 }
 
+function toggleTrackSolo(idx){
+  const t=state.tracks[idx]; if(!t) return;
+  t.solo=!t.solo;
+  updateTrackHeights(); drawCurrentFrame();
+  // update solo button visual
+  document.querySelectorAll('.tl-track').forEach(el=>{
+    const i=parseInt(el.dataset.track);
+    const btn=el.querySelectorAll('.tl-tbtn')[1]; // solo is 2nd button
+    if(btn&&state.tracks[i]){
+      btn.classList.toggle('on',state.tracks[i].solo);
+    }
+  });
+}
+
+async function exportTrackPNG(trackIdx){
+  const track=state.tracks[trackIdx]; if(!track) return;
+  pause();
+  const ov=$('#export-overlay'); ov.classList.add('show');
+  const bar=$('#export-bar'), prog=$('#export-prog');
+  const oc=document.createElement('canvas'); oc.width=OUT_W; oc.height=OUT_H;
+  const oc2d=oc.getContext('2d'); oc2d.imageSmoothingEnabled=false;
+  const zip=new JSZip(), folder=zip.folder('frames');
+  for(let i=0;i<track.totalFrames;i++){
+    const bg=Math.round(255*(state.bgBright/100));
+    oc2d.fillStyle=`rgb(${bg},${bg},${bg})`; oc2d.fillRect(0,0,OUT_W,OUT_H);
+    drawOneTrack(oc2d,OUT_W,OUT_H,i,track,false);
+    folder.file(`frame_${String(i+1).padStart(5,'0')}.png`,oc.toDataURL('image/png').split(',')[1],{base64:true});
+    const pct=((i+1)/track.totalFrames*100).toFixed(1);
+    bar.style.width=pct+'%'; prog.textContent=`${i+1} / ${track.totalFrames} — ${pct}%`;
+    if(i%4===3) await new Promise(r=>setTimeout(r,0));
+  }
+  prog.textContent='ZIPPING...';
+  const blob=await zip.generateAsync({type:'blob'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url;
+  const tname=(track.name||'track').toLowerCase().replace(/[^a-z0-9]/g,'_');
+  a.download=`${tname}_4k.zip`; a.click();
+  URL.revokeObjectURL(url);
+  ov.classList.remove('show'); bar.style.width='0%';
+}
+
+// ── TRACK DRAG & DROP ──
+function getOrCreateDropIndicator(){
+  let ind=$('#tl-drop-indicator');
+  if(!ind){
+    ind=document.createElement('div');
+    ind.id='tl-drop-indicator';
+    $('#tl-tracks').appendChild(ind);
+  }
+  return ind;
+}
+function updateDropIndicator(clientY, fromStateIdx){
+  const container=$('#tl-tracks'), ind=$('#tl-drop-indicator');
+  if(!ind) return;
+  const N=state.tracks.length;
+  const fromUIIdx=N-1-fromStateIdx;
+  const allEls=[...container.querySelectorAll('.tl-track')];
+  const remaining=allEls.filter((_,i)=>i!==fromUIIdx);
+  const containerRect=container.getBoundingClientRect();
+  let indicatorY=null;
+  for(let i=0;i<remaining.length;i++){
+    const r=remaining[i].getBoundingClientRect();
+    if(clientY<r.top+r.height/2){indicatorY=r.top-containerRect.top;break;}
+  }
+  if(indicatorY===null){
+    const last=remaining[remaining.length-1];
+    indicatorY=last?(last.getBoundingClientRect().bottom-containerRect.top):0;
+  }
+  ind.style.top=indicatorY+'px';
+}
+function doTrackReorder(clientY, fromStateIdx){
+  const container=$('#tl-tracks');
+  const allTrackEls=[...container.querySelectorAll('.tl-track')];
+  const N=state.tracks.length;
+  const fromUIIdx=N-1-fromStateIdx;
+  const [track]=state.tracks.splice(fromStateIdx,1);
+  const remaining=allTrackEls.filter((_,i)=>i!==fromUIIdx);
+  let insertUISlot=remaining.length;
+  for(let i=0;i<remaining.length;i++){
+    const r=remaining[i].getBoundingClientRect();
+    if(clientY<r.top+r.height/2){insertUISlot=i;break;}
+  }
+  const insertIdx=Math.max(0,(N-1)-insertUISlot);
+  state.tracks.splice(insertIdx,0,track);
+  // Fix selectedTrack index
+  let sel=state.selectedTrack;
+  if(sel===fromStateIdx){sel=insertIdx;}
+  else{if(sel>fromStateIdx)sel--;if(sel>=insertIdx)sel++;}
+  state.selectedTrack=Math.max(0,Math.min(N-1,sel));
+  rebuildAllTrackUI();
+  recordHistory();
+}
+
 async function sendTrackToAnimator(idx){
   const track=state.tracks[idx];
   if(!track.cellsRaw.length){ alert('データがありません'); return; }
@@ -631,6 +784,38 @@ function buildTrackElement(idx){
   el.dataset.track=idx;
   el.addEventListener('pointerdown',()=>selectTrack(idx));
 
+  // Drag handle
+  const dragHandle=document.createElement('div');
+  dragHandle.className='tl-drag-handle';
+  dragHandle.title='ドラッグで並び替え';
+  dragHandle.textContent='⠿';
+  let dhActive=false, dhStartY=0, dhOrigR=null, dhGhost=null;
+  dragHandle.addEventListener('pointerdown',e=>{
+    e.stopPropagation(); e.preventDefault();
+    dhActive=true; dhStartY=e.clientY;
+    dhOrigR=el.getBoundingClientRect();
+    dhGhost=document.createElement('div');
+    dhGhost.className='tl-drag-ghost';
+    dhGhost.style.left=dhOrigR.left+'px'; dhGhost.style.top=dhOrigR.top+'px';
+    dhGhost.style.width=dhOrigR.width+'px'; dhGhost.style.height=dhOrigR.height+'px';
+    dhGhost.innerHTML=`<div style="padding:0 14px;font-size:9px;color:var(--acid);letter-spacing:.1em;">${(track.name||'TRACK').toUpperCase()}</div>`;
+    document.body.appendChild(dhGhost);
+    el.style.opacity='0.3';
+    getOrCreateDropIndicator().style.display='block';
+    dragHandle.setPointerCapture(e.pointerId);
+  });
+  dragHandle.addEventListener('pointermove',e=>{
+    if(!dhActive) return;
+    dhGhost.style.top=(dhOrigR.top+e.clientY-dhStartY)+'px';
+    updateDropIndicator(e.clientY,idx);
+  });
+  dragHandle.addEventListener('pointerup',e=>{
+    if(!dhActive) return; dhActive=false;
+    dhGhost.remove(); dhGhost=null; el.style.opacity='';
+    const ind=$('#tl-drop-indicator'); if(ind) ind.style.display='none';
+    doTrackReorder(e.clientY,idx);
+  });
+
   // Label
   const label=document.createElement('div');
   label.className='tl-track-label';
@@ -638,6 +823,25 @@ function buildTrackElement(idx){
   const nameEl=document.createElement('div');
   nameEl.className='tl-track-name';
   nameEl.innerHTML=`<span class="num">${String(idx+1).padStart(2,'0')}</span>${(track.name||'TRACK').toUpperCase()}`;
+  // Inline name editing on double-click
+  nameEl.addEventListener('dblclick',e=>{
+    e.stopPropagation();
+    const inp=document.createElement('input');
+    inp.type='text'; inp.value=track.name||'TRACK';
+    inp.style.cssText='background:transparent;border:none;border-bottom:1px solid var(--acid);color:var(--acid);font-family:var(--mono);font-size:9px;width:86px;padding:0;outline:none;letter-spacing:.1em;';
+    nameEl.innerHTML=''; nameEl.appendChild(inp);
+    inp.focus(); inp.select();
+    const commit=()=>{
+      const v=inp.value.trim().toUpperCase()||'TRACK';
+      track.name=v;
+      nameEl.innerHTML=`<span class="num">${String(idx+1).padStart(2,'0')}</span>${v}`;
+    };
+    inp.addEventListener('blur',commit);
+    inp.addEventListener('keydown',ev=>{
+      if(ev.key==='Enter'){inp.blur();ev.stopPropagation();}
+      else if(ev.key==='Escape'){nameEl.innerHTML=`<span class="num">${String(idx+1).padStart(2,'0')}</span>${(track.name||'TRACK').toUpperCase()}`;ev.stopPropagation();}
+    });
+  });
 
   const btns=document.createElement('div');
   btns.className='tl-track-btns';
@@ -648,11 +852,23 @@ function buildTrackElement(idx){
   visBtn.title='表示/非表示';
   visBtn.addEventListener('click',e=>{e.stopPropagation();toggleTrackVis(idx);});
 
+  const soloBtn=document.createElement('button');
+  soloBtn.className='tl-tbtn solo'+(track.solo?' on':'');
+  soloBtn.textContent='S';
+  soloBtn.title='ソロ（このトラックのみ表示）';
+  soloBtn.addEventListener('click',e=>{e.stopPropagation();toggleTrackSolo(idx);});
+
   const anmBtn=document.createElement('button');
   anmBtn.className='tl-tbtn anm';
   anmBtn.textContent='ANM';
   anmBtn.title='ANIMATORに送る';
   anmBtn.addEventListener('click',e=>{e.stopPropagation();sendTrackToAnimator(idx);});
+
+  const pngBtn=document.createElement('button');
+  pngBtn.className='tl-tbtn';
+  pngBtn.textContent='PNG';
+  pngBtn.title='このトラック単体を4K PNG書き出し';
+  pngBtn.addEventListener('click',e=>{e.stopPropagation();exportTrackPNG(idx);});
 
   const delBtn=document.createElement('button');
   delBtn.className='tl-tbtn del';
@@ -660,7 +876,7 @@ function buildTrackElement(idx){
   delBtn.title='トラック削除';
   delBtn.addEventListener('click',e=>{e.stopPropagation();removeTrack(idx);});
 
-  btns.appendChild(visBtn); btns.appendChild(anmBtn); btns.appendChild(delBtn);
+  btns.appendChild(visBtn); btns.appendChild(soloBtn); btns.appendChild(anmBtn); btns.appendChild(pngBtn); btns.appendChild(delBtn);
   label.appendChild(nameEl); label.appendChild(btns);
 
   // Strip
@@ -703,19 +919,37 @@ function buildTrackElement(idx){
   mkRow.className='tl-marker-row'; mkRow.dataset.track=idx;
   strip.appendChild(kfRow); strip.appendChild(mkRow);
 
-  el.appendChild(label); el.appendChild(strip);
+  el.appendChild(dragHandle); el.appendChild(label); el.appendChild(strip);
   return el;
+}
+
+function updateTrackHeights(){
+  const N=state.tracks.length; if(!N) return;
+  const container=$('#tl-tracks');
+  const audioH=audio.buffer?48:0;
+  const avail=(container.clientHeight||176)-audioH;
+  const h=Math.max(32,Math.min(54,Math.floor(avail/N)));
+  container.style.setProperty('--track-h',h+'px');
+  // SOLO dimming
+  const hasSolo=state.tracks.some(t=>t.solo);
+  document.querySelectorAll('.tl-track').forEach(el=>{
+    const i=parseInt(el.dataset.track);
+    el.classList.toggle('soloed-off', hasSolo && !state.tracks[i]?.solo);
+  });
 }
 
 function rebuildAllTrackUI(){
   const container=$('#tl-tracks');
+  // Preserve the audio row before clearing
+  const audioRow=$('#tl-audio-row');
   container.innerHTML='';
   // UI top = front (tracks[N-1]), bottom = BG (tracks[0])
   for(let i=state.tracks.length-1;i>=0;i--){
     container.appendChild(buildTrackElement(i));
   }
+  if(audioRow) container.appendChild(audioRow);
   state.tracks.forEach((_,i)=>{ renderKfDiamonds(i); renderMarkers(i); });
-  drawRuler(); updateWorkArea();
+  drawRuler(); updateWorkArea(); updateTrackHeights();
 }
 
 function renderKfDiamonds(trackIdx){
@@ -855,8 +1089,10 @@ function setupViewport(){
 }
 
 // ── RENDER ──
-function drawOneTrack(tCtx, tw, th, frameIdx, track){
+function drawOneTrack(tCtx, tw, th, frameIdx, track, hasSolo){
+  const soloed = hasSolo !== undefined ? hasSolo : state.tracks.some(t=>t.solo);
   if(!track.visible||!track.frames.length) return;
+  if(soloed && !track.solo) return;
   const fi=Math.min(frameIdx,track.totalFrames-1);
   const f=track.frames[fi];
   if(!f||f.kind!=='draw'||f.hidden||!f.image||!f.image.complete) return;
@@ -876,8 +1112,8 @@ function drawOneTrack(tCtx, tw, th, frameIdx, track){
 function drawFrame(tCtx, tw, th, frameIdx){
   const bg=Math.round(255*(state.bgBright/100));
   tCtx.fillStyle=`rgb(${bg},${bg},${bg})`; tCtx.fillRect(0,0,tw,th);
-  // tracks[0]=BG drawn first, tracks[N-1]=front drawn last
-  for(const track of state.tracks) drawOneTrack(tCtx,tw,th,frameIdx,track);
+  const hasSolo=state.tracks.some(t=>t.solo);
+  for(const track of state.tracks) drawOneTrack(tCtx,tw,th,frameIdx,track,hasSolo);
 }
 function drawCurrentFrame(){
   if(!state.width) return;
@@ -913,13 +1149,15 @@ function tick(ts){
   const wa=state.workArea;
   const waEnd=wa?Math.min(wa.endFrame,state.totalFrames):state.totalFrames;
   const waStart=wa?Math.max(0,wa.startFrame):0;
+  let looped=false;
   while(state.frameAccumulator>=1){
     state.currentFrame++; state.frameAccumulator--;
     if(state.currentFrame>=waEnd){
-      if(state.loop) state.currentFrame=waStart;
-      else{state.currentFrame=waEnd-1;state.isPlaying=false;$('#btn-play').textContent='▶';}
+      if(state.loop){state.currentFrame=waStart; looped=true;}
+      else{state.currentFrame=waEnd-1;state.isPlaying=false;stopAudioSync();$('#btn-play').textContent='▶';}
     }
   }
+  if(looped) startAudioSync(state.currentFrame);
   drawCurrentFrame();
   if(state.isPlaying) requestAnimationFrame(tick);
 }
@@ -930,9 +1168,13 @@ function play(){
   const waEnd=wa?Math.min(wa.endFrame,state.totalFrames):state.totalFrames;
   if(state.currentFrame<waStart||state.currentFrame>=waEnd) state.currentFrame=waStart;
   state.isPlaying=true; state.lastTimestamp=0; state.frameAccumulator=0;
+  startAudioSync(state.currentFrame);
   $('#btn-play').textContent='❙❙'; requestAnimationFrame(tick);
 }
-function pause(){state.isPlaying=false;$('#btn-play').textContent='▶';}
+function pause(){
+  state.isPlaying=false; stopAudioSync();
+  $('#btn-play').textContent='▶';
+}
 function togglePlay(){state.isPlaying?pause():play();}
 function seek(f){state.currentFrame=Math.max(0,Math.min(state.totalFrames-1,f));drawCurrentFrame();}
 
@@ -1066,6 +1308,135 @@ async function exportPNG(){
   URL.revokeObjectURL(url);
   ov.classList.remove('show'); bar.style.width='0%';
 }
+
+// ── AUDIO ──
+function ensureAudioCtx(){
+  if(!audio.ctx) audio.ctx=new (window.AudioContext||window.webkitAudioContext)();
+  return audio.ctx;
+}
+
+async function loadAudioFile(file){
+  try{
+    const ctx=ensureAudioCtx();
+    const ab=await file.arrayBuffer();
+    audio.buffer=await ctx.decodeAudioData(ab);
+    audio.gainNode=ctx.createGain();
+    audio.gainNode.gain.value=audio.muted?0:1;
+    audio.gainNode.connect(ctx.destination);
+    audio.fileName=file.name.replace(/\.[^.]+$/,'').toUpperCase();
+    audio.waveform=extractAudioPeaks(audio.buffer, 2048);
+    audio.offsetFrames=0;
+    $('#tl-audio-row').classList.add('show');
+    $('#tl-audio-name').textContent=audio.fileName;
+    renderAudioWaveform();
+    updateTrackHeights();
+  }catch(e){ alert('音声読み込みエラー: '+e.message); }
+}
+
+function extractAudioPeaks(buffer, numBins){
+  const ch=buffer.getChannelData(0);
+  const blockSize=Math.floor(ch.length/numBins)||1;
+  const peaks=new Float32Array(numBins);
+  for(let i=0;i<numBins;i++){
+    let max=0;
+    const start=i*blockSize;
+    for(let j=0;j<blockSize;j++){const v=Math.abs(ch[start+j]||0);if(v>max)max=v;}
+    peaks[i]=max;
+  }
+  return peaks;
+}
+
+function renderAudioWaveform(){
+  const canvas=$('#tl-audio-canvas'); if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=canvas.clientWidth*dpr; canvas.height=canvas.clientHeight*dpr;
+  const c=canvas.getContext('2d'); c.scale(dpr,dpr);
+  const cw=canvas.clientWidth, ch=canvas.clientHeight;
+  c.clearRect(0,0,cw,ch);
+  if(!audio.buffer||!audio.waveform||!state.totalFrames) return;
+  const total=state.totalFrames;
+  const audioTotalFrames=audio.buffer.duration*state.fps;
+  const off=audio.offsetFrames;
+  const peaks=audio.waveform;
+  const alpha=audio.muted?0.15:0.65;
+  c.strokeStyle=`rgba(249,255,71,${alpha})`; c.lineWidth=1;
+  c.beginPath();
+  for(let x=0;x<cw;x++){
+    const frame=(x/cw)*total;
+    const audioF=frame-off;
+    if(audioF<0||audioF>=audioTotalFrames) continue;
+    const peakIdx=Math.floor((audioF/audioTotalFrames)*peaks.length);
+    const peak=peaks[Math.min(peakIdx,peaks.length-1)];
+    const barH=peak*(ch-2);
+    const cy=ch/2;
+    c.moveTo(x+.5,cy-barH/2); c.lineTo(x+.5,cy+barH/2);
+  }
+  c.stroke();
+  // Offset label
+  const offLabel=$('#tl-audio-offset');
+  if(offLabel) offLabel.textContent=`OFF:${off>=0?'+':''}${off}f`;
+}
+
+function startAudioSync(currentFrame){
+  if(!audio.buffer||!audio.ctx||audio.muted) return;
+  stopAudioSync();
+  if(audio.ctx.state==='suspended') audio.ctx.resume();
+  const secs=currentFrame/state.fps;
+  const playFrom=secs-(audio.offsetFrames/state.fps);
+  if(playFrom>=audio.buffer.duration||playFrom<-2) return;
+  const src=audio.ctx.createBufferSource();
+  src.buffer=audio.buffer;
+  src.connect(audio.gainNode);
+  const startOffset=Math.max(0,playFrom);
+  src.start(0,startOffset);
+  audio.source=src;
+}
+
+function stopAudioSync(){
+  if(audio.source){
+    try{audio.source.stop();}catch(e){}
+    audio.source=null;
+  }
+}
+
+function removeAudio(){
+  stopAudioSync();
+  audio.buffer=null; audio.waveform=null; audio.fileName=''; audio.offsetFrames=0;
+  $('#tl-audio-row').classList.remove('show');
+  updateTrackHeights();
+}
+
+// Audio offset drag on waveform strip
+(function(){
+  const strip=$('#tl-audio-strip');
+  strip.addEventListener('pointerdown',e=>{
+    if(!audio.buffer) return;
+    audio._dragActive=true; audio._dragStartX=e.clientX;
+    audio._dragStartOffset=audio.offsetFrames;
+    strip.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  strip.addEventListener('pointermove',e=>{
+    if(!audio._dragActive||!state.totalFrames) return;
+    const rect=strip.getBoundingClientRect();
+    const framesPerPx=state.totalFrames/rect.width;
+    audio.offsetFrames=Math.round(audio._dragStartOffset+(e.clientX-audio._dragStartX)*framesPerPx);
+    renderAudioWaveform();
+  });
+  strip.addEventListener('pointerup',()=>{ audio._dragActive=false; });
+})();
+
+$('#btn-audio-mute').addEventListener('click',()=>{
+  audio.muted=!audio.muted;
+  if(audio.gainNode) audio.gainNode.gain.value=audio.muted?0:1;
+  $('#btn-audio-mute').classList.toggle('muted',audio.muted);
+  renderAudioWaveform();
+});
+$('#btn-audio-remove').addEventListener('click',removeAudio);
+$('#btn-load-audio').addEventListener('click',()=>$('#audio-file-input').click());
+$('#audio-file-input').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  await loadAudioFile(f); e.target.value='';
+});
 
 // ── EXCHANGE DB ──
 const EX_DB='tdr_exchange', EX_STORE='projects', EX_VERSION=1;
@@ -1314,11 +1685,72 @@ const vp=$('#viewport'), dropOv=$('#drop-overlay');
 vp.addEventListener('drop',async e=>{
   e.preventDefault();
   const file=e.dataTransfer.files[0]; if(!file) return;
+  if(file.type.startsWith('audio/')){
+    await loadAudioFile(file); return;
+  }
   try{loadJSON(JSON.parse(await file.text()));}catch(err){alert('JSON error: '+err.message);}
 });
 
-window.addEventListener('resize',()=>{if(state.width)setupViewport();drawRuler();updatePlayhead();updateWorkArea();});
+window.addEventListener('resize',()=>{if(state.width)setupViewport();drawRuler();updatePlayhead();updateWorkArea();updateTrackHeights();renderAudioWaveform();});
 drawRuler();
+
+// ── NUMERIC SCRUB (AE-style) ──
+(function(){
+  const propStep={x:1,y:1,s:0.01,ax:1,ay:1,rot:0.5,op:0.01};
+  const propMin={s:0,op:0}, propMax={op:1};
+  function formatVal(prop,v){
+    if(prop==='s'||prop==='op') return v.toFixed(3);
+    if(prop==='rot') return v.toFixed(1);
+    return String(Math.round(v));
+  }
+  function clampVal(prop,v){
+    if(propMin[prop]!==undefined) v=Math.max(propMin[prop],v);
+    if(propMax[prop]!==undefined) v=Math.min(propMax[prop],v);
+    return v;
+  }
+  function attachScrub(labelEl,inputEl,prop){
+    if(!labelEl||!inputEl) return;
+    let active=false, startX=0, startV=0, moved=false;
+    labelEl.addEventListener('pointerdown',e=>{
+      const raw=parseFloat(inputEl.value);
+      const def=prop==='s'||prop==='op'?1:0;
+      startV=isNaN(raw)?def:raw;
+      startX=e.clientX; active=true; moved=false;
+      labelEl.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    labelEl.addEventListener('pointermove',e=>{
+      if(!active) return;
+      const dx=e.clientX-startX;
+      if(Math.abs(dx)<2&&!moved) return;
+      moved=true;
+      const multi=e.shiftKey?10:(e.ctrlKey||e.metaKey?0.1:1);
+      const v=clampVal(prop, startV+dx*propStep[prop]*multi);
+      inputEl.value=formatVal(prop,v);
+      const t=selTrack(); if(!t) return;
+      if(hasKfAt(prop,state.currentFrame,t.keyframes)){
+        setKf(prop,state.currentFrame,v,t.keyframes);
+        renderKfDiamonds(state.selectedTrack); drawCurrentFrame();
+      }
+    });
+    labelEl.addEventListener('pointerup',()=>{
+      if(!active) return; active=false;
+      if(!moved) return;
+      const t=selTrack(); if(!t) return;
+      if(hasKfAt(prop,state.currentFrame,t.keyframes)) recordHistory();
+    });
+  }
+  // FX HUD
+  ALL_PROPS.forEach(prop=>{
+    const row=document.querySelector(`#fx-hud .fx-row[data-prop="${prop}"]`);
+    if(row) attachScrub(row.querySelector('.k'),$(`#fx-${prop}`),prop);
+  });
+  // Inspector
+  ALL_PROPS.forEach(prop=>{
+    const row=document.querySelector(`#inspector .kf-row[data-prop="${prop}"]`);
+    if(row) attachScrub(row.querySelector('.k'),$(`#kf-${prop}`),prop);
+  });
+})();
 </script>
 </body>
 </html>

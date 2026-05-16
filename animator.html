@@ -37,13 +37,30 @@ html,body{
   display:grid;
   grid-template-columns:72px 1fr 240px;
   grid-template-rows:36px 1fr 130px 32px;
+  grid-template-areas:
+    "top  top   top"
+    "tool stage side"
+    "strip strip strip"
+    "bot  bot   bot";
   height:100vh;width:100vw;
 }
-/* ツールバー左右入れ替え */
-#app.swapped{ grid-template-columns:240px 1fr 72px; }
-#app.swapped #toolbar{ grid-column:3; border-right:none; border-left:1px solid var(--border); }
-#app.swapped #side{ grid-column:1; border-left:none; border-right:1px solid var(--border); }
-#app.swapped #stage{ grid-column:2; }
+#topbar{grid-area:top;}
+#toolbar{grid-area:tool;}
+#stage{grid-area:stage;}
+#side{grid-area:side;}
+#strip-area{grid-area:strip;}
+#bottombar{grid-area:bot;}
+/* ツールバー左右入れ替え（列幅とエリアを反転。stageは常に中央） */
+#app.swapped{
+  grid-template-columns:240px 1fr 72px;
+  grid-template-areas:
+    "top  top   top"
+    "side stage tool"
+    "strip strip strip"
+    "bot  bot   bot";
+}
+#app.swapped #toolbar{ border-right:none; border-left:1px solid var(--border); }
+#app.swapped #side{ border-left:none; border-right:1px solid var(--border); }
 
 /* ── トップバー ── */
 #topbar{
@@ -302,6 +319,23 @@ html,body{
 .ref-op-row{display:flex;align-items:center;gap:7px;}
 .ref-op-row input[type=range]{flex:1;height:3px;accent-color:var(--acid);cursor:pointer;}
 .ref-op-val{font-size:8px;color:rgba(255,255,255,0.5);min-width:30px;text-align:right;letter-spacing:0.05em;}
+/* REFパネル内セクション */
+.ref-sect{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.ref-sect:last-of-type{border-bottom:none;margin-bottom:0;padding-bottom:0;}
+.ref-sect-h{font-size:8px;letter-spacing:0.22em;color:rgba(54,255,0,0.55);margin-bottom:7px;}
+.ref-frame-row{display:flex;gap:5px;}
+.ref-frame-row .ref-btn{flex:1;text-align:center;padding:4px 0;}
+.ref-op-tag{font-size:8px;letter-spacing:0.12em;color:rgba(255,255,255,0.4);min-width:54px;}
+.ref-op-row input[type=range]{flex:1;height:3px;accent-color:var(--acid);cursor:pointer;}
+/* ツール列 左右入替ボタン */
+.tb-swap{
+  width:48px;height:28px;margin-bottom:4px;
+  background:transparent;border:1px solid var(--border);
+  color:rgba(255,255,255,0.5);font-size:13px;cursor:pointer;
+  transition:all 0.12s;flex-shrink:0;
+}
+.tb-swap:hover{color:var(--acid);border-color:var(--border-bright);}
+.tb-swap.on{color:var(--acid);border-color:rgba(54,255,0,0.4);background:rgba(54,255,0,0.08);}
 
 .layer{
   position:absolute;top:0;left:0;
@@ -628,9 +662,17 @@ input[type=range]::-moz-range-thumb{
   content:'';
   position:absolute;top:0;left:50%;
   transform:translateX(-50%);
-  width:10px;height:10px;
+  width:12px;height:12px;
   background:var(--acid);
   clip-path:polygon(50% 100%,0 0,100% 0);
+  pointer-events:auto;
+}
+/* つかみやすいよう透明な広めのヒットエリア（見た目は1px線のまま） */
+#timeline-cursor::after{
+  content:'';
+  position:absolute;top:0;bottom:0;left:50%;
+  transform:translateX(-50%);
+  width:18px;
   pointer-events:auto;
 }
 
@@ -990,17 +1032,10 @@ input[type=range]::-moz-range-thumb{
       <span>EDIT MODE</span>
     </div>
     <div class="right">
-      <button id="btn-flip" title="キャンバス左右反転（表示のみ）">FLIP</button>
-      <button id="btn-mirror" title="左右ミラー描画">MIRROR</button>
+      <button id="btn-flip" title="キャンバス左右反転（表示のみ・X）">FLIP</button>
+      <button id="btn-mirror" title="左右ミラー描画（M）">MIRROR</button>
       <span class="sep">/</span>
-      <button id="btn-frame-edit" title="FRAMEレイヤー編集モード（全コマ共通の下絵レイヤー）" class="">FRAME</button>
-      <button id="btn-frame-vis" class="" title="FRAMEレイヤー表示ON/OFF">✕</button>
-      <input type="range" id="frame-opacity" min="0" max="100" value="40" title="FRAMEレイヤー不透明度" style="width:60px;vertical-align:middle;">
-      <button id="btn-frame-clear" title="FRAMEレイヤーをクリア">CLR</button>
-      <button id="btn-frame-img" title="参照画像をFRAMEレイヤーに読み込み">IMG</button>
-      <input type="file" id="frame-img-input" accept="image/*" style="display:none;">
-      <button id="btn-ref-panel" title="参照ANIMATOR（複数のANIMATORをコマ同期で重ね表示）">REF</button>
-      <input type="file" id="ref-json-input" accept="application/json,.json" multiple style="display:none;">
+      <button id="btn-ref-panel" title="REF ANIMATORS / FRAMEレイヤー（R）">REF</button>
       <span class="sep">/</span>
       <button id="btn-export" title="クリック: 4K書き出し / Shift+クリック: BG透明で書き出し">EXPORT 4K</button>
       <button id="btn-export-seq" title="全コマを4K BG透過の連番PNGでZIP書き出し（AE合成用）">SEQ PNG</button>
@@ -1008,7 +1043,6 @@ input[type=range]::-moz-range-thumb{
       <button id="btn-import-json" title="JSONファイルを読み込み（既存プロジェクトを置換）">IMPORT JSON</button>
       <input type="file" id="json-file-input" accept="application/json,.json" style="display:none;">
       <span class="sep">/</span>
-      <button id="btn-swap-toolbar" title="ツールバーを左右入れ替え">⇄</button>
       <button id="btn-send-composer" title="現在のプロジェクトを共有DB経由でCOMPOSERに送る">→ COMPOSER</button>
       <button id="btn-home" title="ランディングページに戻る">HOME</button>
     </div>
@@ -1016,6 +1050,7 @@ input[type=range]::-moz-range-thumb{
 
   <!-- LEFT TOOLBAR -->
   <div id="toolbar">
+    <button id="btn-swap-toolbar" class="tb-swap" title="ツールバー左右入れ替え (Tab)">⇄</button>
     <button class="tool on" data-tool="pen" title="ペン (B)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M3 21l4-1 11-11-3-3L4 17l-1 4z"></path>
@@ -1143,7 +1178,6 @@ input[type=range]::-moz-range-thumb{
       <span class="frame-pos" id="dur-info" title="クリック: コマ⇔秒 / Shift+クリック: 最大尺変更" style="cursor: pointer;">072 コマ</span>
       <div class="right">
         <button id="btn-onion" title="オニオンスキン (O)" class="">ONION</button>
-        <button id="btn-split-frame" title="現在フレームを2分割">SPLIT</button>
         <button id="btn-add-frame" title="新規フレーム (N)">+ FRAME</button>
         <button id="btn-dup-frame" title="複製 (D)">DUPLICATE</button>
         <button id="btn-del-frame" title="削除 (Del)">DELETE</button>
@@ -1188,11 +1222,31 @@ input[type=range]::-moz-range-thumb{
     <span id="ref-panel-close" title="閉じる">✕</span>
   </div>
   <div id="ref-panel-body">
-    <div class="ref-add-row">
-      <button id="ref-add-json" title="JSONファイルから参照を追加">+ JSON FILE</button>
-      <button id="ref-add-saved" title="共有DBの保存済みプロジェクトから追加">+ FROM SAVED</button>
+    <!-- FRAMEレイヤー（全コマ共通の描けるトレース下絵） -->
+    <div class="ref-sect">
+      <div class="ref-sect-h">FRAME LAYER（描ける下絵）</div>
+      <div class="ref-frame-row">
+        <button id="btn-frame-edit" class="ref-btn" title="FRAMEレイヤーに直接描画するモード">EDIT</button>
+        <button id="btn-frame-vis" class="ref-btn" title="FRAMEレイヤー表示ON/OFF">✕</button>
+        <button id="btn-frame-clear" class="ref-btn del" title="FRAMEレイヤーをクリア">CLR</button>
+        <button id="btn-frame-img" class="ref-btn" title="参照画像をFRAMEレイヤーに読み込み">IMG</button>
+      </div>
+      <div class="ref-op-row" style="margin-top:6px;">
+        <span class="ref-op-tag">OPACITY</span>
+        <input type="range" id="frame-opacity" min="0" max="100" value="40" title="FRAMEレイヤー不透明度">
+      </div>
+      <input type="file" id="frame-img-input" accept="image/*" style="display:none;">
     </div>
-    <div id="ref-list"></div>
+    <!-- 参照ANIMATOR（複数ANIMATORをコマ同期で重ね表示） -->
+    <div class="ref-sect">
+      <div class="ref-sect-h">REF ANIMATORS（コマ同期参照）</div>
+      <div class="ref-add-row">
+        <button id="ref-add-json" title="JSONファイルから参照を追加">+ JSON FILE</button>
+        <button id="ref-add-saved" title="共有DBの保存済みプロジェクトから追加">+ FROM SAVED</button>
+      </div>
+      <div id="ref-list"></div>
+    </div>
+    <input type="file" id="ref-json-input" accept="application/json,.json" multiple style="display:none;">
   </div>
 </div>
 
@@ -3858,18 +3912,23 @@ stage.addEventListener('pointercancel', endMidPan);
 stage.addEventListener('auxclick', e => { if(e.button === 1) e.preventDefault(); });
 stage.addEventListener('mousedown', e => { if(e.button === 1) e.preventDefault(); });
 
-// 指定スクリーン座標を中心にズーム
+// 指定スクリーン座標を基点にズーム（ステージ中心基準で逆算 → カーソル下が動かない）
 function zoomAt(screenX, screenY, newZoom){
   newZoom = Math.max(0.05, Math.min(8, newZoom));
-  const wrapRect = wrap.getBoundingClientRect();
-  // wrap内での相対位置
-  const localX = screenX - wrapRect.left;
-  const localY = screenY - wrapRect.top;
-  const ratio = newZoom / state.zoom;
-  // パン補正: ズーム後に同じ画面位置がカーソル下にくるよう
-  state.panX -= (localX * ratio - localX);
-  state.panY -= (localY * ratio - localY);
+  // canvas-wrap は #stage の flex 中央に配置され、transform=translate(pan) scaleX(flip)。
+  // 画面座標 → キャンバス座標（現ズーム/パンの逆写像）
+  const sr = stage.getBoundingClientRect();
+  const cx = sr.left + sr.width / 2;   // ステージ中心（安定した基準）
+  const cy = sr.top  + sr.height / 2;
+  const sx = state.flipped ? -1 : 1;
+  const oldZ = state.zoom;
+  // カーソル位置に対応するキャンバス内座標
+  const canX = (screenX - cx - state.panX) / (oldZ * sx) + CFG.WORK_W / 2;
+  const canY = (screenY - cy - state.panY) / oldZ        + CFG.WORK_H / 2;
+  // 新ズームで同じキャンバス座標がカーソル下に来るようパンを再計算
   state.zoom = newZoom;
+  state.panX = screenX - cx - (canX - CFG.WORK_W / 2) * newZoom * sx;
+  state.panY = screenY - cy - (canY - CFG.WORK_H / 2) * newZoom;
   state.fitMode = false;
   applyZoom();
 }
@@ -5055,7 +5114,6 @@ function splitAtPlayhead(){
     splitCurrentFrame(); // 中央
   }
 }
-document.getElementById('btn-split-frame').addEventListener('click', splitAtPlayhead);
 document.getElementById('strip-prev').addEventListener('click', () => {
   if(state.currentFrame > 0){
     switchToFrame(state.currentFrame - 1);
@@ -5175,8 +5233,22 @@ window.addEventListener('keydown', e => {
     clearFrameSelection();
   }
   if(e.key === 'f' || e.key === 'F'){
-    // F: FRAMEレイヤー編集モードをトグル
-    document.getElementById('btn-frame-edit').click();
+    // F: ズームをFITに
+    fitToStage();
+  }
+  if(e.key === 'm' || e.key === 'M'){
+    document.getElementById('btn-mirror').click();
+  }
+  if(e.key === 'x' || e.key === 'X'){
+    document.getElementById('btn-flip').click();
+  }
+  if(e.key === 'r' || e.key === 'R'){
+    toggleRefPanel();
+  }
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    const sb = document.getElementById('btn-swap-toolbar');
+    if(sb) sb.click();
   }
 });
 

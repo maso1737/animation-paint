@@ -201,6 +201,18 @@ let tlHistIdx = -1;
 
 ---
 
+## UI調整（実装済みメモ）
+- ツールバー左右入替は grid-template-areas で実装（#app.swapped で areas/列幅を反転、
+  stageは常に中央。崩れ防止）。⇄ボタンはツール列最上部（.tb-swap）。ショートカット Tab
+- topbar の FRAME群（編集/表示/不透明度/CLR/IMG）は REFパネルへ集約。
+  REFパネル構成: ①FRAME LAYER（EDIT/✕/CLR/IMG＋OPACITY）②REF ANIMATORS（参照リスト）
+  topbarは REF ボタン1個に集約。REFパネル開閉ショートカット R
+- ショートカット変更: F=FIT / M=MIRROR / X=FLIP / R=REFパネル / Tab=ツールバー左右入替
+  （旧 F=FRAME編集 は廃止。FRAME編集はREFパネルのEDITボタン）
+- SPLITボタンは廃止。Sキーのみ（カーソル下=state.scrubTickで分割）
+- timeline-cursor に透明ヒットエリア（::after 幅18px）追加でつかみやすく
+- ホイール拡縮は zoomAt() をステージ中心基準の逆写像に修正（カーソル下が動かない）
+
 ## 次回実装候補（優先度おまかせ）
 
 ### 機能要望メモ

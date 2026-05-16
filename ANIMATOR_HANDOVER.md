@@ -32,6 +32,18 @@ _新チャット冒頭にこのファイルを貼り付けてください_
 - FRAMEレイヤー: 下書き/参考用レイヤー（白/黒ベタ平面を透明度調整してトレース。書き出しに含まれない）
 - 参照画像読み込み → トレースレイヤーに組込み
 
+### 参照ANIMATOR（複数ANIMATOR参照 / REFパネル）
+- topbar `REF` ボタンでフローティングパネル開閉（`#ref-panel`、ヘッダドラッグ移動）
+- 他のANIMATORプロジェクト（PROJECT_v1/ANIMATOR_v1 JSON）を **コマ同期で重ね表示**
+  - 追加元: `+ JSON FILE`（複数選択可） / `+ FROM SAVED`（共有DB tdr_exchange の保存済み）
+  - 各参照: 表示ON/OFF、不透明度スライダー、`→ ANM`（その素材のANIMATORを開く=連携更新）、削除
+- 専用 `#ref-layer` キャンバス（bg-layerの直後、frame-layerの背面）へ毎フレーム合成
+  - `source.cells` を1ティック=1画像へ展開（`expandRefTicks`）。参照側が尽きたら非表示
+  - 現在ティック同期: 非再生時=`frameStartTick(currentFrame)` / 再生時=再生ティック
+  - 書き出し / COMPOSER / オニオン には**含まれない**（純粋に作画参照用）
+- 永続化: IndexedDB `STORE_REFS`（DB_VERSION 3）。変更時のみdebounce保存（描画autosaveとは別系統）
+- 5レイヤー分けの運用: ANIMATORを5本作り、各々で他4本をREF参照。COMPOSERでまとめて同期
+
 ### キャンバス・描画
 - ペン 1px / 2px / 20px、アンチエイリアスOFF
 - インクカラー 3色（主線黒・下書き水色・指示オレンジ）
@@ -209,9 +221,8 @@ let tlHistIdx = -1;
 
 **タイムライン**
 - SPLITツール: クリックした位置で分割（現在は真ん中分割）。ツール切替ショートカットS
-- トラック レイヤー機能(最大8程度)
-- トラック 上下移動
-- トラック 塗りつぶしの表示による参照機能
+- ~~トラック レイヤー機能~~ → **REF参照ANIMATORで解決済み**（ANIMATOR側はトラックを持たず、
+  複数ANIMATORをREFパネルでコマ同期参照。レイヤー分けは別ANIMATORを作りREFで重ねる運用）
 
 **書き出し**
 - トラック別 PNG BG透過 ZIP一括書き出し（COMPOSER、AE合成前提）

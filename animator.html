@@ -232,6 +232,64 @@ html,body{
   border:1px solid rgba(255,111,181,0.5);
   z-index:30;pointer-events:none;
 }
+/* REF ANIMATORS フローティングパネル */
+#ref-panel{
+  position:fixed;top:80px;right:24px;width:300px;
+  background:rgba(8,8,8,0.96);
+  border:1px solid var(--border-bright);
+  box-shadow:0 8px 40px rgba(0,0,0,0.7),0 0 0 1px rgba(0,0,0,0.4);
+  z-index:120;font-family:var(--mono);color:#fff;
+  display:none;
+}
+#ref-panel.show{display:block;}
+#ref-panel-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;cursor:move;
+  background:linear-gradient(90deg,rgba(54,255,0,0.10),transparent);
+  border-bottom:1px solid var(--border);
+  font-size:9px;letter-spacing:0.3em;color:var(--acid);
+  user-select:none;
+}
+#ref-panel-close{cursor:pointer;color:rgba(255,255,255,0.4);font-size:12px;line-height:1;padding:0 2px;}
+#ref-panel-close:hover{color:var(--acid);}
+#ref-panel-body{padding:8px 10px;max-height:60vh;overflow-y:auto;}
+#ref-panel-body::-webkit-scrollbar{width:4px;}
+#ref-panel-body::-webkit-scrollbar-thumb{background:rgba(54,255,0,0.3);}
+.ref-add-row{display:flex;gap:6px;margin-bottom:8px;}
+.ref-add-row button{
+  flex:1;background:transparent;border:1px solid var(--border);
+  color:rgba(255,255,255,0.65);font-family:var(--mono);font-size:8px;
+  letter-spacing:0.12em;padding:5px 4px;cursor:pointer;transition:all 0.15s;
+}
+.ref-add-row button:hover{border-color:var(--acid);color:var(--acid);}
+.ref-empty{color:rgba(255,255,255,0.3);font-size:8px;letter-spacing:0.15em;text-align:center;padding:14px 0;}
+.ref-item{
+  border:1px solid var(--border);margin-bottom:6px;padding:7px 8px;
+  background:rgba(255,255,255,0.015);
+}
+.ref-item.hidden-ref{opacity:0.45;}
+.ref-item-top{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.ref-dot{width:9px;height:9px;flex-shrink:0;border-radius:1px;}
+.ref-name{
+  flex:1;font-size:9px;letter-spacing:0.06em;color:rgba(255,255,255,0.85);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ref-meta{font-size:7px;color:rgba(255,255,255,0.35);letter-spacing:0.1em;}
+.ref-item-btns{display:flex;gap:4px;align-items:center;}
+.ref-btn{
+  background:transparent;border:1px solid var(--border);
+  color:rgba(255,255,255,0.5);font-family:var(--mono);font-size:8px;
+  padding:2px 6px;cursor:pointer;line-height:1.4;transition:all 0.12s;
+}
+.ref-btn:hover{border-color:var(--border-bright);color:var(--acid);}
+.ref-btn.on{border-color:var(--acid);color:var(--acid);background:rgba(54,255,0,0.1);}
+.ref-btn.anm{color:rgba(54,255,0,0.55);}
+.ref-btn.anm:hover{color:var(--acid);border-color:var(--acid);}
+.ref-btn.del:hover{color:#ff5555;border-color:rgba(255,85,85,0.45);}
+.ref-op-row{display:flex;align-items:center;gap:7px;}
+.ref-op-row input[type=range]{flex:1;height:3px;accent-color:var(--acid);cursor:pointer;}
+.ref-op-val{font-size:8px;color:rgba(255,255,255,0.5);min-width:30px;text-align:right;letter-spacing:0.05em;}
+
 .layer{
   position:absolute;top:0;left:0;
   image-rendering:pixelated;
@@ -928,6 +986,8 @@ input[type=range]::-moz-range-thumb{
       <button id="btn-frame-clear" title="FRAMEレイヤーをクリア">CLR</button>
       <button id="btn-frame-img" title="参照画像をFRAMEレイヤーに読み込み">IMG</button>
       <input type="file" id="frame-img-input" accept="image/*" style="display:none;">
+      <button id="btn-ref-panel" title="参照ANIMATOR（複数のANIMATORをコマ同期で重ね表示）">REF</button>
+      <input type="file" id="ref-json-input" accept="application/json,.json" multiple style="display:none;">
       <span class="sep">/</span>
       <button id="btn-export" title="クリック: 4K書き出し / Shift+クリック: BG透明で書き出し">EXPORT 4K</button>
       <button id="btn-export-json" title="全フレームをJSONで書き出し（COMPOSER連携用）">EXPORT JSON</button>
@@ -1016,6 +1076,7 @@ input[type=range]::-moz-range-thumb{
     </div>
     <div id="canvas-wrap" style="width: 842.457px; height: 473.882px; transform: translate(85.2755px, 5.00258px) scaleX(1); transform-origin: 50% 50%;">
       <canvas class="layer" id="bg-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
+      <canvas class="layer" id="ref-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="frame-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px; display: none; opacity: 1;"></canvas>
       <canvas class="layer" id="onion-prev" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="onion-next" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
@@ -1105,6 +1166,21 @@ input[type=range]::-moz-range-thumb{
 
 </div>
 
+<!-- REF ANIMATORS パネル -->
+<div id="ref-panel">
+  <div id="ref-panel-head">
+    <span>REF ANIMATORS</span>
+    <span id="ref-panel-close" title="閉じる">✕</span>
+  </div>
+  <div id="ref-panel-body">
+    <div class="ref-add-row">
+      <button id="ref-add-json" title="JSONファイルから参照を追加">+ JSON FILE</button>
+      <button id="ref-add-saved" title="共有DBの保存済みプロジェクトから追加">+ FROM SAVED</button>
+    </div>
+    <div id="ref-list"></div>
+  </div>
+</div>
+
 <!-- MODAL DIALOG -->
 <div id="modal-overlay">
   <div class="modal-box">
@@ -1135,9 +1211,10 @@ const CFG = {
   MAX_DURATION_SEC: 15,
   // IndexedDB
   DB_NAME: 'animator',
-  DB_VERSION: 2,
+  DB_VERSION: 3,
   STORE_FRAMES: 'frames',
   STORE_META:   'meta',
+  STORE_REFS:   'refs',
 };
 
 // 48色パレット (アニメ塗りでよく使う系統)
@@ -1268,6 +1345,10 @@ const state = {
     opacity: 0.4,    // 0..1
     editMode: false, // true = 描画ターゲットがframeLayerになる
   },
+  // 参照ANIMATOR（複数のANIMATORをコマ同期で重ね表示。書き出し/COMPOSERには行かない）
+  // [{id,name,projectId,visible,opacity,color, ticks:[Image|null], totalTicks, fps,
+  //   source:{name,projectId,fps,cells:[{kind,duration,image}]}}]
+  refAnimators: [],
   // COMPOSER から戻ってきた追記データ（keyframes/markers）。再exportで保持。
   // shape: { keyframes:{x:[],y:[],s:[],ax:[],ay:[]}, markers:[{frame,label}] }
   composerData: null,
@@ -1363,6 +1444,352 @@ function redoFrameLayer(){
   frameLayerCtx.putImageData(flHistory[flHistIdx], 0, 0);
   scheduleFrameLayerSave();
 }
+
+// ============================================================
+// REF ANIMATORS (複数ANIMATORをコマ同期で参照表示)
+//   ・書き出し / COMPOSER / オニオン には含まれない（純粋に作画参照用）
+//   ・ref-layer キャンバスへ毎フレーム合成（現在ティックに同期）
+// ============================================================
+const REF_COLORS = ['#36FF00','#F9FF47','#47C8FF','#FF6FB5','#FFA94D','#B98CFF','#5CE0C0','#FF5555'];
+let _refSyncTick = -1; // 再生中のティック（再生中のみ >=0）
+
+function currentSyncTick(){
+  if(state.playing && _refSyncTick >= 0) return _refSyncTick;
+  return frameStartTick(state.currentFrame);
+}
+
+// PROJECT_v1(cells) / 旧 ANIMATOR_v1(frames) を {name,projectId,fps,cells:[{kind,duration,image}]} に正規化
+function parseRefSource(json, fallbackName){
+  const list = Array.isArray(json.cells) ? json.cells
+             : Array.isArray(json.frames) ? json.frames : null;
+  if(!list || !list.length) return null;
+  const cells = list.map(c => {
+    if(c.kind === 'empty') return { kind:'empty', duration: Math.max(1, c.duration|0) };
+    return {
+      kind:'draw',
+      duration: Math.max(1, c.duration|0),
+      hidden: !!c.hidden,
+      image: c.image || null,
+    };
+  });
+  return {
+    name: String(json.name || json.scene || fallbackName || 'REF').toUpperCase(),
+    projectId: json.projectId || null,
+    fps: typeof json.fps === 'number' ? json.fps : 24,
+    cells,
+  };
+}
+
+// source.cells を「1ティック=1画像」配列へ展開（画像は1セル1回だけdecode）
+function expandRefTicks(source){
+  return new Promise(resolve => {
+    const ticks = [];
+    const pending = [];
+    for(const c of source.cells){
+      if(c.kind === 'empty' || c.hidden || !c.image){
+        for(let i=0;i<c.duration;i++) ticks.push(null);
+        continue;
+      }
+      const im = new Image();
+      const startIdx = ticks.length;
+      for(let i=0;i<c.duration;i++) ticks.push(null);
+      const p = new Promise(res => {
+        im.onload = () => { for(let i=0;i<c.duration;i++) ticks[startIdx+i] = im; res(); };
+        im.onerror = () => res();
+      });
+      im.src = c.image;
+      pending.push(p);
+    }
+    Promise.all(pending).then(() => resolve({ ticks, totalTicks: ticks.length }));
+  });
+}
+
+async function addRefAnimator(json, fallbackName){
+  const src = parseRefSource(json, fallbackName);
+  if(!src){ modalAlert('フレームが含まれていません'); return; }
+  const { ticks, totalTicks } = await expandRefTicks(src);
+  const idx = state.refAnimators.length;
+  state.refAnimators.push({
+    id: 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6),
+    name: src.name,
+    projectId: src.projectId,
+    visible: true,
+    opacity: 0.5,
+    color: REF_COLORS[idx % REF_COLORS.length],
+    ticks, totalTicks,
+    fps: src.fps,
+    source: src,
+  });
+  buildRefList();
+  renderRefLayer();
+  saveRefs();
+}
+
+function removeRefAnimator(id){
+  const i = state.refAnimators.findIndex(r => r.id === id);
+  if(i < 0) return;
+  state.refAnimators.splice(i, 1);
+  buildRefList();
+  renderRefLayer();
+  saveRefs();
+}
+function toggleRefVis(id){
+  const r = state.refAnimators.find(x => x.id === id);
+  if(!r) return;
+  r.visible = !r.visible;
+  buildRefList();
+  renderRefLayer();
+  saveRefs();
+}
+function setRefOpacity(id, v){
+  const r = state.refAnimators.find(x => x.id === id);
+  if(!r) return;
+  r.opacity = Math.max(0, Math.min(1, v));
+  renderRefLayer();
+  saveRefs();
+}
+
+async function openRefInAnimator(id){
+  const r = state.refAnimators.find(x => x.id === id);
+  if(!r) return;
+  const ok = await modalConfirm(`「${r.name}」のANIMATORを開きますか？\n（現在のプロジェクトは自動保存されています）`);
+  if(!ok) return;
+  try{
+    const pid = r.projectId || ('p_' + Date.now().toString(36));
+    const payload = {
+      format:'PROJECT_v1', projectId: pid,
+      exportedAt: new Date().toISOString(),
+      fps: r.source.fps || 24, durationUnit:'frames',
+      width: CFG.WORK_W, height: CFG.WORK_H,
+      bgBright: 100,
+      cellCount: r.source.cells.length,
+      cells: r.source.cells.map((c,i) => c.kind === 'empty'
+        ? { id:'c'+i, kind:'empty', duration:c.duration }
+        : { id:'c'+i, kind:'draw', duration:c.duration, hidden:!!c.hidden, image:c.image||null }),
+      composer: null,
+    };
+    await exPut(payload);
+    location.href = 'animator.html?id=' + encodeURIComponent(pid);
+  }catch(err){
+    modalAlert('ANIMATORを開けませんでした: ' + err.message);
+  }
+}
+
+// ref-layer に現在ティックの参照フレームを合成
+function renderRefLayer(tickOverride){
+  if(!refLayerCtx) return;
+  refLayerCtx.clearRect(0, 0, CFG.WORK_W, CFG.WORK_H);
+  const refs = state.refAnimators;
+  if(!refs.length) return;
+  const t = (typeof tickOverride === 'number') ? tickOverride : currentSyncTick();
+  for(const r of refs){
+    if(!r.visible || !r.ticks) continue;
+    if(t < 0 || t >= r.ticks.length) continue;   // 参照側が尽きたら非表示
+    const img = r.ticks[t];
+    if(!img) continue;
+    refLayerCtx.globalAlpha = r.opacity;
+    try{ refLayerCtx.drawImage(img, 0, 0, CFG.WORK_W, CFG.WORK_H); }catch(e){}
+  }
+  refLayerCtx.globalAlpha = 1;
+}
+
+// ── REF パネル UI ──
+function buildRefList(){
+  const list = document.getElementById('ref-list');
+  if(!list) return;
+  list.innerHTML = '';
+  if(!state.refAnimators.length){
+    const e = document.createElement('div');
+    e.className = 'ref-empty';
+    e.textContent = '— NO REFERENCE —';
+    list.appendChild(e);
+    return;
+  }
+  state.refAnimators.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'ref-item' + (r.visible ? '' : ' hidden-ref');
+
+    const top = document.createElement('div');
+    top.className = 'ref-item-top';
+    const dot = document.createElement('span');
+    dot.className = 'ref-dot';
+    dot.style.background = r.color;
+    const name = document.createElement('span');
+    name.className = 'ref-name';
+    name.textContent = r.name;
+    name.title = r.name;
+    const meta = document.createElement('span');
+    meta.className = 'ref-meta';
+    meta.textContent = `${r.totalTicks}f`;
+    top.appendChild(dot); top.appendChild(name); top.appendChild(meta);
+
+    const btns = document.createElement('div');
+    btns.className = 'ref-item-btns';
+    btns.style.marginTop = '5px';
+    const visBtn = document.createElement('button');
+    visBtn.className = 'ref-btn' + (r.visible ? ' on' : '');
+    visBtn.textContent = r.visible ? '● VIS' : '✕ VIS';
+    visBtn.addEventListener('click', () => toggleRefVis(r.id));
+    const anmBtn = document.createElement('button');
+    anmBtn.className = 'ref-btn anm';
+    anmBtn.textContent = '→ ANM';
+    anmBtn.title = 'このANIMATORを開く（連携更新）';
+    anmBtn.addEventListener('click', () => openRefInAnimator(r.id));
+    const delBtn = document.createElement('button');
+    delBtn.className = 'ref-btn del';
+    delBtn.textContent = '✕';
+    delBtn.title = '参照を削除';
+    delBtn.addEventListener('click', () => removeRefAnimator(r.id));
+    btns.appendChild(visBtn); btns.appendChild(anmBtn);
+    btns.appendChild(document.createElement('span')).style.flex = '1';
+    btns.appendChild(delBtn);
+
+    const opRow = document.createElement('div');
+    opRow.className = 'ref-op-row';
+    opRow.style.marginTop = '6px';
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = '0'; slider.max = '100';
+    slider.value = String(Math.round(r.opacity * 100));
+    const opVal = document.createElement('span');
+    opVal.className = 'ref-op-val';
+    opVal.textContent = Math.round(r.opacity * 100) + '%';
+    slider.addEventListener('input', () => {
+      opVal.textContent = slider.value + '%';
+      setRefOpacity(r.id, (parseInt(slider.value,10)||0) / 100);
+    });
+    opRow.appendChild(slider); opRow.appendChild(opVal);
+
+    item.appendChild(top);
+    item.appendChild(btns);
+    item.appendChild(opRow);
+    list.appendChild(item);
+  });
+}
+
+function toggleRefPanel(force){
+  const p = document.getElementById('ref-panel');
+  const show = (typeof force === 'boolean') ? force : !p.classList.contains('show');
+  p.classList.toggle('show', show);
+  document.getElementById('btn-ref-panel').classList.toggle('on', show);
+  if(show) buildRefList();
+}
+
+// 共有DB全件取得（FROM SAVED 用）
+async function exGetAll(){
+  try{
+    const _db = await exOpenDB();
+    return await new Promise((res,rej)=>{
+      const tx = _db.transaction(EX_STORE,'readonly');
+      const r = tx.objectStore(EX_STORE).getAll();
+      r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error);
+    });
+  }catch(e){ return []; }
+}
+
+// ── REF 永続化 (IndexedDB STORE_REFS) ──
+let _refSaveTimer = null;
+function saveRefs(){
+  clearTimeout(_refSaveTimer);
+  _refSaveTimer = setTimeout(async () => {
+    if(!db) return;
+    try{
+      const tx = db.transaction(CFG.STORE_REFS, 'readwrite');
+      tx.objectStore(CFG.STORE_REFS).put({
+        items: state.refAnimators.map(r => ({
+          id:r.id, name:r.name, projectId:r.projectId,
+          visible:r.visible, opacity:r.opacity, color:r.color,
+          fps:r.fps, source:r.source,
+        })),
+        savedAt: Date.now(),
+      }, 'refs');
+    }catch(e){ console.warn('saveRefs failed', e); }
+  }, 400);
+}
+async function loadRefs(){
+  if(!db || !db.objectStoreNames.contains(CFG.STORE_REFS)) return;
+  try{
+    const tx = db.transaction(CFG.STORE_REFS, 'readonly');
+    const rec = await new Promise((res,rej)=>{
+      const r = tx.objectStore(CFG.STORE_REFS).get('refs');
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    });
+    if(!rec || !Array.isArray(rec.items) || !rec.items.length) return;
+    for(const it of rec.items){
+      if(!it.source) continue;
+      const { ticks, totalTicks } = await expandRefTicks(it.source);
+      state.refAnimators.push({
+        id: it.id || ('r_'+Math.random().toString(36).slice(2,8)),
+        name: it.name || 'REF',
+        projectId: it.projectId || null,
+        visible: it.visible !== false,
+        opacity: typeof it.opacity === 'number' ? it.opacity : 0.5,
+        color: it.color || REF_COLORS[state.refAnimators.length % REF_COLORS.length],
+        ticks, totalTicks,
+        fps: it.fps || (it.source.fps || 24),
+        source: it.source,
+      });
+    }
+    buildRefList();
+    renderRefLayer();
+  }catch(e){ console.warn('loadRefs failed', e); }
+}
+
+// ── REF パネル イベント ──
+document.getElementById('btn-ref-panel').addEventListener('click', () => toggleRefPanel());
+document.getElementById('ref-panel-close').addEventListener('click', () => toggleRefPanel(false));
+document.getElementById('ref-add-json').addEventListener('click', () => {
+  document.getElementById('ref-json-input').click();
+});
+document.getElementById('ref-json-input').addEventListener('change', async e => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  for(const f of files){
+    try{
+      const json = JSON.parse(await f.text());
+      await addRefAnimator(json, f.name.replace(/\.[^.]+$/,''));
+    }catch(err){ modalAlert('JSON読み込み失敗: ' + (err.message||err)); }
+  }
+});
+document.getElementById('ref-add-saved').addEventListener('click', async () => {
+  const all = await exGetAll();
+  const mine = state.projectId;
+  const cands = all.filter(rec => rec && rec.projectId !== mine && Array.isArray(rec.cells) && rec.cells.length);
+  if(!cands.length){ modalAlert('共有DBに利用できるプロジェクトがありません'); return; }
+  const pick = await showModal({
+    msg: '参照に追加するプロジェクトを選択',
+    buttons: [
+      ...cands.slice(0, 6).map(rec => ({
+        label: (String(rec.projectId||'').slice(0,10)) + ' · ' + (rec.cellCount||rec.cells.length) + 'cell',
+        value: rec.projectId,
+      })),
+      { label: 'CANCEL', value: null },
+    ],
+  });
+  if(!pick) return;
+  const rec = cands.find(c => c.projectId === pick);
+  if(rec) await addRefAnimator(rec, 'SAVED');
+});
+
+// パネルのドラッグ移動
+(function(){
+  const panel = document.getElementById('ref-panel');
+  const head  = document.getElementById('ref-panel-head');
+  let dragging=false, sx=0, sy=0, ox=0, oy=0;
+  head.addEventListener('pointerdown', e => {
+    if(e.target.id === 'ref-panel-close') return;
+    dragging = true;
+    const r = panel.getBoundingClientRect();
+    sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
+    panel.style.left = ox+'px'; panel.style.top = oy+'px'; panel.style.right = 'auto';
+    head.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  head.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    panel.style.left = (ox + e.clientX - sx) + 'px';
+    panel.style.top  = Math.max(0, oy + e.clientY - sy) + 'px';
+  });
+  head.addEventListener('pointerup', () => { dragging=false; });
+})();
 
 // ============================================================
 // FRAME SELECTION (複数選択 + コピペ)
@@ -1540,6 +1967,8 @@ const drawCanvas = document.getElementById('draw-layer');
 const onionPrev  = document.getElementById('onion-prev');
 const onionNext  = document.getElementById('onion-next');
 const frameLayerCanvas = document.getElementById('frame-layer');
+const refLayerCanvas = document.getElementById('ref-layer');
+const refLayerCtx = refLayerCanvas.getContext('2d');
 const bgCtx      = bgCanvas.getContext('2d');
 const drawCtx    = drawCanvas.getContext('2d', { willReadFrequently: true });
 const onionPrevCtx = onionPrev.getContext('2d');
@@ -1588,7 +2017,7 @@ function applyZoom(){
   const sx = state.flipped ? -1 : 1;
   wrap.style.transform = `translate(${state.panX}px, ${state.panY}px) scaleX(${sx})`;
   wrap.style.transformOrigin = '50% 50%';
-  [bgCanvas, drawCanvas, onionPrev, onionNext, frameLayerCanvas].forEach(c => {
+  [bgCanvas, drawCanvas, onionPrev, onionNext, frameLayerCanvas, refLayerCanvas].forEach(c => {
     c.style.width  = w + 'px';
     c.style.height = h + 'px';
   });
@@ -2051,6 +2480,7 @@ function switchToFrame(idx){
   updateFramePos();
   updateDurInfo();
   updateTimeTrack();
+  renderRefLayer();
 }
 
 // フレーム追加（カレントの直後）
@@ -2829,6 +3259,11 @@ function play(){
     if(tick !== lastTick){
       lastTick = tick;
       if(playCursor) playCursor.style.left = tickToPx(tick) + 'px';
+      // 参照ANIMATORを再生ティックに同期
+      if(state.refAnimators.length){
+        _refSyncTick = tick;
+        renderRefLayer(tick);
+      }
     }
 
     const { idx, showIdx } = frameToShowAt(tick);
@@ -2859,6 +3294,7 @@ function play(){
 }
 function stop(){
   state.playing = false;
+  _refSyncTick = -1;
   cancelAnimationFrame(playRAF);
   document.getElementById('btn-play').classList.remove('on');
   // オニオン復帰
@@ -3506,6 +3942,7 @@ async function applyProjectJSON(json){
     await loadFrameLayerFromDataURL(null);
   }
   applyFrameLayerStyle();
+  renderRefLayer();
   scheduleSave();
   pushTimelineHistory();
 }
@@ -3670,6 +4107,9 @@ function openDB(){
       }
       if(!_db.objectStoreNames.contains(CFG.STORE_META)){
         _db.createObjectStore(CFG.STORE_META);
+      }
+      if(!_db.objectStoreNames.contains(CFG.STORE_REFS)){
+        _db.createObjectStore(CFG.STORE_REFS);
       }
     };
     req.onsuccess = e => resolve(e.target.result);
@@ -4594,6 +5034,8 @@ window.addEventListener('resize', () => {
   updateTimeTrack();
   // FRAMEレイヤー初期表示
   applyFrameLayerStyle();
+  // 参照ANIMATOR復元
+  await loadRefs();
   // 初回保存
   if(state.pendingSaveFrames.size > 0) scheduleSave();
   // タイムライン履歴の初期スナップ（ロード後の状態を記録）

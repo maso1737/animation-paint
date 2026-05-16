@@ -99,6 +99,13 @@ html,body{
   letter-spacing:0.05em;
 }
 .tool.on .lbl{color:var(--acid);}
+/* モードバッジ（筆圧ペン / 透明塗りつぶし消し） */
+.tool.pp-on::after,.tool.fe-on::after{
+  content:'';position:absolute;top:4px;right:4px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--neon);box-shadow:0 0 5px rgba(249,255,71,0.9);
+}
+.tool.fe-on::after{background:#FF6FB5;box-shadow:0 0 5px rgba(255,111,181,0.9);}
 .tool-sep{
   width:32px;height:1px;
   background:var(--border);
@@ -1296,6 +1303,9 @@ const state = {
   inkColor: 'black',    // 'black'|'blue'|'orange'
   fillColor: '#000000',
   bgBright: 100,
+  // ペンボタン Wクリックで筆圧ペン / 塗りつぶしボタン Wクリックで透明消し
+  pressurePen: false,
+  fillErase: false,
   // ズームとパン
   zoom: 1,
   fitMode: true,
@@ -2105,6 +2115,38 @@ function drawDot(ctx, x, y, size, color){
   else drawDot20(ctx, x, y, color);
 }
 
+// 任意半径の塗り円ドット（筆圧ペン用）
+function drawDotRadius(ctx, x, y, r, color){
+  ctx.fillStyle = color;
+  if(r <= 0.7){ ctx.fillRect(x, y, 1, 1); return; }
+  const ir = Math.max(1, Math.round(r));
+  for(let dy = -ir; dy < ir; dy++){
+    for(let dx = -ir; dx < ir; dx++){
+      const ddx = dx + 0.5, ddy = dy + 0.5;
+      if(ddx*ddx + ddy*ddy <= r*r) ctx.fillRect(x + dx, y + dy, 1, 1);
+    }
+  }
+}
+// 半径を線形補間しながらブレゼンハムで結ぶ（筆圧ペン用）
+function drawLineRadius(ctx, x0, y0, x1, y1, r0, r1, color){
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  const steps = Math.max(dx, dy) || 1;
+  let err = dx - dy;
+  let x = x0, y = y0, n = 0;
+  while(true){
+    const t = n / steps;
+    drawDotRadius(ctx, x, y, r0 + (r1 - r0) * t, color);
+    if(x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if(e2 > -dy){ err -= dy; x += sx; }
+    if(e2 <  dx){ err += dx; y += sy; }
+    n++;
+  }
+}
+
 // ブレゼンハム直線で2点間を補間
 function drawLine(ctx, x0, y0, x1, y1, size, color){
   const dx = Math.abs(x1 - x0);
@@ -2172,10 +2214,13 @@ function floodFill(startX, startY, fillHex){
   const idx = (x,y) => (y * W + x) * 4;
   const startI = idx(startX, startY);
   const tR = data[startI], tG = data[startI+1], tB = data[startI+2], tA = data[startI+3];
-  // 塗る色
-  const fc = hexToRgb(fillHex);
-  // 既に同色なら何もしない
-  if(tR === fc.r && tG === fc.g && tB === fc.b && tA === 255) return;
+  const erase = !!state.fillErase;
+  // 塗る色（透明消し時は (0,0,0,0)）
+  const fc = erase ? {r:0,g:0,b:0} : hexToRgb(fillHex);
+  const fA = erase ? 0 : 255;
+  // 既に目的状態なら何もしない
+  if(erase){ if(tA === 0) return; }
+  else if(tR === fc.r && tG === fc.g && tB === fc.b && tA === 255) return;
   // スキャンライン
   const stack = [[startX, startY]];
   const matches = (i) =>
@@ -2188,7 +2233,7 @@ function floodFill(startX, startY, fillHex){
     let spanAbove = false, spanBelow = false;
     while(lx < W && matches(idx(lx,y))){
       const i = idx(lx,y);
-      data[i] = fc.r; data[i+1] = fc.g; data[i+2] = fc.b; data[i+3] = 255;
+      data[i] = fc.r; data[i+1] = fc.g; data[i+2] = fc.b; data[i+3] = fA;
       if(y > 0){
         if(matches(idx(lx, y-1))){
           if(!spanAbove){ stack.push([lx, y-1]); spanAbove = true; }
@@ -3448,27 +3493,49 @@ function smoothPoint(x, y){
 function activeDrawCtx(){
   return state.frameLayer.editMode ? frameLayerCtx : drawCtx;
 }
-function startStroke(clientX, clientY){
+// 筆圧 → 半径（現在のペンサイズを最大半径とする）
+function pressureRadius(pressure){
+  const maxR = state.penSize === 1 ? 3 : state.penSize === 2 ? 6 : 16;
+  const p = Math.max(0.08, Math.min(1, pressure || 0.5));
+  return Math.max(0.7, maxR * p);
+}
+let lastR = 1;
+function startStroke(clientX, clientY, pressure){
   const {x, y} = toCanvasCoord(clientX, clientY);
   lastX = x; lastY = y;
   strokeBuffer = [{x, y}];
   drawing = true;
   const ctx = activeDrawCtx();
+  const usePressure = state.pressurePen && state.tool === 'pen';
   if(state.tool === 'pen'){
-    drawDot(ctx, x, y, currentToolSize(), INK[state.inkColor]);
-    if(state.mirrorOn) drawDot(ctx, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
+    if(usePressure){
+      lastR = pressureRadius(pressure);
+      drawDotRadius(ctx, x, y, lastR, INK[state.inkColor]);
+      if(state.mirrorOn) drawDotRadius(ctx, mirrorX(x), y, lastR, INK[state.inkColor]);
+    } else {
+      drawDot(ctx, x, y, currentToolSize(), INK[state.inkColor]);
+      if(state.mirrorOn) drawDot(ctx, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
+    }
   } else if(state.tool === 'erase'){
     eraseDot(ctx, x, y, currentToolSize());
     if(state.mirrorOn) eraseDot(ctx, mirrorX(x), y, currentToolSize());
   }
 }
-function continueStroke(clientX, clientY){
+function continueStroke(clientX, clientY, pressure){
   const raw = toCanvasCoord(clientX, clientY);
   const {x, y} = smoothPoint(raw.x, raw.y);
   const ctx = activeDrawCtx();
+  const usePressure = state.pressurePen && state.tool === 'pen';
   if(state.tool === 'pen'){
-    drawLine(ctx, lastX, lastY, x, y, currentToolSize(), INK[state.inkColor]);
-    if(state.mirrorOn) drawLine(ctx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
+    if(usePressure){
+      const r = pressureRadius(pressure);
+      drawLineRadius(ctx, lastX, lastY, x, y, lastR, r, INK[state.inkColor]);
+      if(state.mirrorOn) drawLineRadius(ctx, mirrorX(lastX), lastY, mirrorX(x), y, lastR, r, INK[state.inkColor]);
+      lastR = r;
+    } else {
+      drawLine(ctx, lastX, lastY, x, y, currentToolSize(), INK[state.inkColor]);
+      if(state.mirrorOn) drawLine(ctx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
+    }
   } else if(state.tool === 'erase'){
     eraseLine(ctx, lastX, lastY, x, y, currentToolSize());
     if(state.mirrorOn) eraseLine(ctx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize());
@@ -3504,7 +3571,7 @@ drawCanvas.addEventListener('pointerdown', e => {
     if(state.frameLayer.editMode) pushFrameLayerHistory();
     else pushHistory();
   } else {
-    startStroke(e.clientX, e.clientY);
+    startStroke(e.clientX, e.clientY, e.pressure);
   }
 });
 
@@ -3514,7 +3581,7 @@ drawCanvas.addEventListener('pointermove', e => {
   document.getElementById('hud-coord').textContent = `${x} · ${y}`;
   if(drawing && e.pointerId === drawingPointerId){
     e.preventDefault();
-    continueStroke(e.clientX, e.clientY);
+    continueStroke(e.clientX, e.clientY, e.pressure);
   }
 });
 
@@ -3544,8 +3611,38 @@ document.querySelectorAll('.tool').forEach(btn => {
     drawCanvas.style.cursor = (t === 'fill') ? 'cell' : 'crosshair';
     // ペン↔消しゴムでサイズUIを更新
     refreshPenSizeUI();
+    applyInkUIForTool();
   });
 });
+
+// ERASE中はインクボタンを「主線のみON」表示（消しゴムは色を使わない）。
+// それ以外は state.inkColor を反映。state.inkColor 自体は変更しない。
+function applyInkUIForTool(){
+  const erasing = state.tool === 'erase';
+  document.querySelectorAll('.tb-ink').forEach(b => {
+    const active = erasing ? (b.dataset.c === 'black') : (b.dataset.c === state.inkColor);
+    b.classList.toggle('on', active);
+  });
+}
+
+// PEN ボタン ダブルクリック → 筆圧ペン ON/OFF
+const penToolBtn = document.querySelector('.tool[data-tool="pen"]');
+if(penToolBtn){
+  penToolBtn.addEventListener('dblclick', () => {
+    state.pressurePen = !state.pressurePen;
+    penToolBtn.classList.toggle('pp-on', state.pressurePen);
+    penToolBtn.title = '筆圧ペン: ' + (state.pressurePen ? 'ON（Wクリックで切替）' : 'OFF（Wクリックで切替）');
+  });
+}
+// FILL ボタン ダブルクリック → 透明塗りつぶし消し ON/OFF
+const fillToolBtn = document.querySelector('.tool[data-tool="fill"]');
+if(fillToolBtn){
+  fillToolBtn.addEventListener('dblclick', () => {
+    state.fillErase = !state.fillErase;
+    fillToolBtn.classList.toggle('fe-on', state.fillErase);
+    fillToolBtn.title = '透明塗りつぶし消し: ' + (state.fillErase ? 'ON（Wクリックで切替）' : 'OFF（Wクリックで切替）');
+  });
+}
 
 document.querySelectorAll('.tb-pen').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -3570,19 +3667,19 @@ function refreshPenSizeUI(){
 
 document.querySelectorAll('.tb-ink').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tb-ink').forEach(b => b.classList.remove('on'));
-    btn.classList.add('on');
     state.inkColor = btn.dataset.c;
     // ERASE中は主線フラグだけ更新してツールはERASEのまま。それ以外はPENへ自動切替
     if(state.tool !== 'erase'){
       const penBtn = document.querySelector('.tool[data-tool="pen"]');
       if(penBtn && state.tool !== 'pen') penBtn.click();
     }
+    applyInkUIForTool();
   });
 });
 
 // パレット生成
 const palEl = document.getElementById('palette');
+palEl.innerHTML = ''; // 静的HTMLの重複セルを除去（JSが唯一の生成元）
 PALETTE_48.forEach((c, i) => {
   const cell = document.createElement('div');
   cell.className = 'pal-cell';

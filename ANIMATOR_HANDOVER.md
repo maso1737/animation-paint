@@ -210,9 +210,11 @@ let tlHistIdx = -1;
 、ポスト通信（BroadcastChannel API）
 
 **キャンバス**
-- 主線/下書き/指示ボタンはERASE時は主線ONのみON）
-- 筆圧ペン（現ペンボタンWクリックで変更）
-- 透明で塗りつぶし消し（塗りつぶしボタンWクリックで変更）
+- ~~主線/下書き/指示ボタンはERASE時は主線ONのみON~~ → 実装済み（applyInkUIForTool）
+- ~~筆圧ペン（ペンボタンWクリックで変更）~~ → 実装済み
+  （state.pressurePen / pressureRadius / drawDotRadius・drawLineRadius。PEN Wクリックで黄バッジ）
+- ~~透明で塗りつぶし消し（塗りつぶしボタンWクリックで変更）~~ → 実装済み
+  （state.fillErase。floodFillが(0,0,0,0)で領域クリア。FILL Wクリックで桃バッジ）
 - 無限キャンバス（書き出しは4Kのみ）。左上の2048×1152をタップで解像度枠の表示/変更。セーフフレーム80%/90%＋のりしろ1.2倍表示
 - 線のコピペ＆選択/移動/回転/スケール（ペイント中にCtrl押すと矩形選択、Alt押すと投げ縄にかわる）
 - FILL PALETTEのフローティング化（右パネルから切り離してドラッグ移動できるウィンドウに）

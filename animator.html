@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>ANIMATOR — EDIT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --acid:#36FF00;
@@ -38,6 +39,11 @@ html,body{
   grid-template-rows:36px 1fr 130px 32px;
   height:100vh;width:100vw;
 }
+/* ツールバー左右入れ替え */
+#app.swapped{ grid-template-columns:240px 1fr 72px; }
+#app.swapped #toolbar{ grid-column:3; border-right:none; border-left:1px solid var(--border); }
+#app.swapped #side{ grid-column:1; border-left:none; border-right:1px solid var(--border); }
+#app.swapped #stage{ grid-column:2; }
 
 /* ── トップバー ── */
 #topbar{
@@ -997,10 +1003,12 @@ input[type=range]::-moz-range-thumb{
       <input type="file" id="ref-json-input" accept="application/json,.json" multiple style="display:none;">
       <span class="sep">/</span>
       <button id="btn-export" title="クリック: 4K書き出し / Shift+クリック: BG透明で書き出し">EXPORT 4K</button>
+      <button id="btn-export-seq" title="全コマを4K BG透過の連番PNGでZIP書き出し（AE合成用）">SEQ PNG</button>
       <button id="btn-export-json" title="全フレームをJSONで書き出し（COMPOSER連携用）">EXPORT JSON</button>
       <button id="btn-import-json" title="JSONファイルを読み込み（既存プロジェクトを置換）">IMPORT JSON</button>
       <input type="file" id="json-file-input" accept="application/json,.json" style="display:none;">
       <span class="sep">/</span>
+      <button id="btn-swap-toolbar" title="ツールバーを左右入れ替え">⇄</button>
       <button id="btn-send-composer" title="現在のプロジェクトを共有DB経由でCOMPOSERに送る">→ COMPOSER</button>
       <button id="btn-home" title="ランディングページに戻る">HOME</button>
     </div>
@@ -1306,6 +1314,10 @@ const state = {
   // ペンボタン Wクリックで筆圧ペン / 塗りつぶしボタン Wクリックで透明消し
   pressurePen: false,
   fillErase: false,
+  // 直近にスクラブ/クリックしたティック（SPLITのクリック位置分割に使用）
+  scrubTick: -1,
+  // ツールバー左右入れ替え
+  toolbarSwapped: false,
   // ズームとパン
   zoom: 1,
   fitMode: true,
@@ -3625,6 +3637,25 @@ function applyInkUIForTool(){
   });
 }
 
+// ツールバー左右入れ替え
+function applyToolbarSwap(){
+  document.getElementById('app').classList.toggle('swapped', state.toolbarSwapped);
+  // レイアウト変更後にステージサイズ再フィット
+  if(typeof fitToStage === 'function'){
+    requestAnimationFrame(() => { fitToStage(); });
+  }
+}
+const swapBtn = document.getElementById('btn-swap-toolbar');
+if(swapBtn){
+  swapBtn.addEventListener('click', () => {
+    state.toolbarSwapped = !state.toolbarSwapped;
+    swapBtn.classList.toggle('on', state.toolbarSwapped);
+    applyToolbarSwap();
+    if(typeof markMetaDirty === 'function') markMetaDirty();
+    scheduleSave();
+  });
+}
+
 // PEN ボタン ダブルクリック → 筆圧ペン ON/OFF
 const penToolBtn = document.querySelector('.tool[data-tool="pen"]');
 if(penToolBtn){
@@ -4182,6 +4213,69 @@ function exportPNG(opts){
   }, 'image/png');
 }
 
+// 連番PNG（4K・BG透過）をZIP一括書き出し（AE等での合成前提）
+// 1ティック=1枚（保持コマは同一画像を複製、empty/hidden=完全透明）
+async function exportSequencePNG(){
+  if(typeof JSZip === 'undefined'){ await modalAlert('ZIPライブラリの読込に失敗しました'); return; }
+  const cur = curFrame();
+  if(cur) syncFrameFromCanvas(cur);
+  const total = totalTicks();
+  if(total <= 0){ await modalAlert('書き出すコマがありません'); return; }
+  const ok = await modalConfirm(`全 ${total} コマを 4K BG透過の連番PNGで書き出します。\nコマ数が多いと時間がかかります。続行しますか？`);
+  if(!ok) return;
+
+  const btn = document.getElementById('btn-export-seq');
+  const origLabel = btn.textContent;
+  btn.disabled = true;
+
+  // WORK解像度→4Kへ nearest 拡大する一時キャンバス
+  const work = document.createElement('canvas');
+  work.width = CFG.WORK_W; work.height = CFG.WORK_H;
+  const workCtx = work.getContext('2d');
+  const ex = document.createElement('canvas');
+  ex.width = CFG.EXPORT_W; ex.height = CFG.EXPORT_H;
+  const exCtx = ex.getContext('2d');
+  exCtx.imageSmoothingEnabled = false;
+
+  const zip = new JSZip();
+  const folder = zip.folder('frames');
+  let tick = 0;
+  try{
+    for(let i = 0; i < state.frames.length; i++){
+      const f = state.frames[i];
+      const dur = Math.max(1, f.duration | 0);
+      // このセルの1枚を生成（draw かつ非hidden のときのみ絵を描く）
+      exCtx.clearRect(0, 0, CFG.EXPORT_W, CFG.EXPORT_H);
+      if(f.kind === 'draw' && !f.hidden && f.drawData){
+        workCtx.putImageData(new ImageData(new Uint8ClampedArray(f.drawData), CFG.WORK_W, CFG.WORK_H), 0, 0);
+        exCtx.drawImage(work, 0, 0, CFG.EXPORT_W, CFG.EXPORT_H);
+      }
+      const dataURL = ex.toDataURL('image/png').split(',')[1];
+      for(let d = 0; d < dur; d++){
+        tick++;
+        folder.file(`frame_${String(tick).padStart(5,'0')}.png`, dataURL, { base64: true });
+      }
+      btn.textContent = `${Math.round(tick / total * 100)}%`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    btn.textContent = 'ZIP...';
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    a.href = url;
+    a.download = `sequence_${ts}_4k_alpha.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(err){
+    await modalAlert('書き出しに失敗しました: ' + (err.message || err));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = origLabel;
+  }
+}
+document.getElementById('btn-export-seq').addEventListener('click', exportSequencePNG);
+
 // ============================================================
 // INDEXED DB (自動保存・複数フレーム対応)
 // ストア構成:
@@ -4272,6 +4366,7 @@ async function flushSave(){
       workEnd: state.workEnd,
       cellBaseW: state.cellBaseW,
       cellStretchPerTick: state.cellStretchPerTick,
+      toolbarSwapped: state.toolbarSwapped,
       frameLayer: {
         visible: state.frameLayer.visible,
         opacity: state.frameLayer.opacity,
@@ -4374,6 +4469,7 @@ async function loadProject(){
     // セル幅設定
     if(typeof meta.cellBaseW === 'number') state.cellBaseW = meta.cellBaseW;
     if(typeof meta.cellStretchPerTick === 'number') state.cellStretchPerTick = meta.cellStretchPerTick;
+    if(typeof meta.toolbarSwapped === 'boolean') state.toolbarSwapped = meta.toolbarSwapped;
 
     // UI反映
     document.getElementById('fps-input').value = state.fps;
@@ -4653,6 +4749,7 @@ function setupCursorScrub(){
     const rect = inner.getBoundingClientRect();
     const px = clientX - rect.left;
     const tick = Math.max(0, Math.min(totalTicks() - 1, Math.round(pxToTick(px))));
+    state.scrubTick = tick; // SPLITのクリック位置分割に使用
     // tickに対応するフレームを探して切替
     let acc = 0;
     for(let i = 0; i < state.frames.length; i++){
@@ -4946,7 +5043,19 @@ function splitCurrentFrame(splitAt){
   scheduleSave();
   pushTimelineHistory(); // タイムライン操作記録
 }
-document.getElementById('btn-split-frame').addEventListener('click', splitCurrentFrame);
+// スクラブ/クリック位置（state.scrubTick）で分割。範囲外なら中央分割にフォールバック
+function splitAtPlayhead(){
+  const f = curFrame();
+  if(!f || f.kind !== 'draw' || f.duration < 2){ splitCurrentFrame(); return; }
+  const start = frameStartTick(state.currentFrame);
+  const off = state.scrubTick - start;
+  if(state.scrubTick >= 0 && off >= 1 && off <= f.duration - 1){
+    splitCurrentFrame(off);
+  } else {
+    splitCurrentFrame(); // 中央
+  }
+}
+document.getElementById('btn-split-frame').addEventListener('click', splitAtPlayhead);
 document.getElementById('strip-prev').addEventListener('click', () => {
   if(state.currentFrame > 0){
     switchToFrame(state.currentFrame - 1);
@@ -5025,7 +5134,7 @@ window.addEventListener('keydown', e => {
   if(e.key === 'o' || e.key === 'O'){ document.getElementById('btn-onion').click(); }
   if(e.key === 'n' || e.key === 'N'){ document.getElementById('btn-add-frame').click(); }
   if(e.key === 'd' || e.key === 'D'){ document.getElementById('btn-dup-frame').click(); }
-  if(e.key === 's' || e.key === 'S'){ splitCurrentFrame(); }
+  if(e.key === 's' || e.key === 'S'){ splitAtPlayhead(); }
   if(e.key === 'w' || e.key === 'W'){
     // ワークエリアを全範囲にリセット
     state.workStart = 0;
@@ -5131,6 +5240,13 @@ window.addEventListener('resize', () => {
   updateTimeTrack();
   // FRAMEレイヤー初期表示
   applyFrameLayerStyle();
+  // ツールバー左右入れ替え復元
+  if(state.toolbarSwapped){
+    document.getElementById('app').classList.add('swapped');
+    const sb = document.getElementById('btn-swap-toolbar');
+    if(sb) sb.classList.add('on');
+    fitToStage();
+  }
   // 参照ANIMATOR復元
   await loadRefs();
   // 初回保存

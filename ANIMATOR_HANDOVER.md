@@ -219,18 +219,20 @@ let tlHistIdx = -1;
 - 線のコピペ＆選択/移動/回転/スケール（ペイント中にCtrl押すと矩形選択、Alt押すと投げ縄にかわる）
 - FILL PALETTEのフローティング化（右パネルから切り離してドラッグ移動できるウィンドウに）
 - 参照画像パネル フローティングUI（画像読み込み（File API）・ホイール拡縮 + パン・スポイトでFILL PALETTEに色取り込み）
-- ツールバーの左右入れ替え
+- ~~ツールバーの左右入れ替え~~ → 実装済み（topbar `⇄`。#app.swapped でgrid列入替、meta.toolbarSwappedで永続化）
 
 **タイムライン**
-- SPLITツール: クリックした位置で分割（現在は真ん中分割）。ツール切替ショートカットS
+- ~~SPLITツール: クリックした位置で分割~~ → 実装済み（state.scrubTick=スクラブ/クリック位置、
+  splitAtPlayhead()。SPLITボタン/Sキー共にクリック位置で分割、範囲外は中央フォールバック）
 - ~~トラック レイヤー機能~~ → **REF参照ANIMATORで解決済み**（ANIMATOR側はトラックを持たず、
   複数ANIMATORをREFパネルでコマ同期参照。レイヤー分けは別ANIMATORを作りREFで重ねる運用）
 
 **書き出し**
-- トラック別 PNG BG透過 ZIP一括書き出し（COMPOSER、AE合成前提）
+- ~~連番PNG BG透過 ZIP一括書き出し（COMPOSER/AE合成前提）~~ → 実装済み
+  （topbar `SEQ PNG`。exportSequencePNG()。1ティック=1枚で4K透過、保持コマは複製、JSZip CDN追加）
 
 **保存**
-- ローカルファイル保存/読み込み（IndexedDB補完用）
+- ローカルファイル保存/読み込み（IndexedDB補完用） ※EXPORT/IMPORT JSONで概ね充足
 
 **Settings UI**
 - フローティングSettingsウィンドウ

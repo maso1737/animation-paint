@@ -229,8 +229,13 @@ let tlHistIdx = -1;
   （state.fillErase。floodFillが(0,0,0,0)で領域クリア。FILL Wクリックで桃バッジ）
 - 無限キャンバス（書き出しは4Kのみ）。左上の2048×1152をタップで解像度枠の表示/変更。セーフフレーム80%/90%＋のりしろ1.2倍表示
 - 線のコピペ＆選択/移動/回転/スケール（ペイント中にCtrl押すと矩形選択、Alt押すと投げ縄にかわる）
-- FILL PALETTEのフローティング化（右パネルから切り離してドラッグ移動できるウィンドウに）
-- 参照画像パネル フローティングUI（画像読み込み（File API）・ホイール拡縮 + パン・スポイトでFILL PALETTEに色取り込み）
+- ~~FILL PALETTEのフローティング化~~ → 実装済み
+  （pnlヘッダ ⤢ で切替。#app.palette-float でside列を0に畳む、position:fixed＋ヘッダドラッグ、
+   meta.paletteFloat/paletteFloatPos で永続化）
+- ~~スポイトでFILL PALETTEに色取り込み~~ → 実装済み
+  （PICKツール or Alt+クリック。sampleCompositeColor が draw→FRAME→REF→白 を上から探索。
+   取り込み色は #picked-swatch に表示、state.fillColorへ反映）
+- 参照画像パネル単体フローティング（ホイール拡縮+パン）はREFのIMG＋スポイトで概ね代替済み
 - ~~ツールバーの左右入れ替え~~ → 実装済み（topbar `⇄`。#app.swapped でgrid列入替、meta.toolbarSwappedで永続化）
 
 **タイムライン**

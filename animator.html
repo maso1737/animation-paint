@@ -394,6 +394,30 @@ html,body{
   display:flex;align-items:center;justify-content:space-between;
 }
 .pnl-h .v{color:var(--white);font-size:10px;letter-spacing:0.05em;}
+.pnl-h-r{display:flex;align-items:center;gap:8px;}
+.picked-swatch{
+  width:16px;height:16px;border:1px solid rgba(255,255,255,0.3);
+  background:#000;display:inline-block;border-radius:1px;
+}
+.pnl-detach{
+  background:transparent;border:1px solid var(--border);
+  color:rgba(255,255,255,0.5);font-family:var(--mono);font-size:11px;
+  width:20px;height:18px;cursor:pointer;line-height:1;transition:all 0.12s;
+}
+.pnl-detach:hover{color:var(--acid);border-color:var(--border-bright);}
+/* FILL PALETTE フローティング */
+#palette-pnl.floating{
+  position:fixed;top:90px;left:auto;right:24px;width:228px;z-index:120;
+  background:rgba(8,8,8,0.96);border:1px solid var(--border-bright);
+  box-shadow:0 8px 40px rgba(0,0,0,0.7);
+}
+#palette-pnl.floating .pnl-h{cursor:move;}
+#app.palette-float{ grid-template-columns:72px 1fr 0; }
+#app.palette-float.swapped{
+  grid-template-columns:0 1fr 72px;
+  grid-template-areas:"top top top" "side stage tool" "strip strip strip" "bot bot bot";
+}
+#app.palette-float #side{ display:none; }
 
 /* ペンサイズ */
 .pen-row{display:flex;gap:6px;}
@@ -1073,6 +1097,13 @@ input[type=range]::-moz-range-thumb{
       </svg>
       <span class="lbl">FILL</span>
     </button>
+    <button class="tool" data-tool="eyedrop" title="スポイト（色を吸い取る・Alt+クリックでも可）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M19 3a2.5 2.5 0 0 1 0 3.5l-2 2-2.5-2.5 2-2A2.5 2.5 0 0 1 19 3z"></path>
+        <path d="M14.5 6.5L5 16v3h3l9.5-9.5"></path>
+      </svg>
+      <span class="lbl">PICK</span>
+    </button>
 
     <div class="tool-sep"></div>
 
@@ -1149,8 +1180,14 @@ input[type=range]::-moz-range-thumb{
   <div id="side">
 
     <!-- 塗りパレット -->
-    <div class="pnl">
-      <div class="pnl-h"><span>FILL PALETTE</span></div>
+    <div class="pnl" id="palette-pnl">
+      <div class="pnl-h" id="palette-head">
+        <span>FILL PALETTE</span>
+        <span class="pnl-h-r">
+          <span class="picked-swatch" id="picked-swatch" title="スポイトで取り込んだ色"></span>
+          <button class="pnl-detach" id="btn-palette-float" title="フローティング切替（切り離し/ドッキング）">⤢</button>
+        </span>
+      </div>
       <div class="palette" id="palette"><div class="pal-cell" data-c="#FFF0E0" style="background: rgb(255, 240, 224);"></div><div class="pal-cell" data-c="#FCE5CE" style="background: rgb(252, 229, 206);"></div><div class="pal-cell" data-c="#F8C99B" style="background: rgb(248, 201, 155);"></div><div class="pal-cell" data-c="#E8A87C" style="background: rgb(232, 168, 124);"></div><div class="pal-cell" data-c="#C68863" style="background: rgb(198, 136, 99);"></div><div class="pal-cell" data-c="#3B2C2A" style="background: rgb(59, 44, 42);"></div><div class="pal-cell" data-c="#5C3A36" style="background: rgb(92, 58, 54);"></div><div class="pal-cell" data-c="#8B4543" style="background: rgb(139, 69, 67);"></div><div class="pal-cell" data-c="#C04848" style="background: rgb(192, 72, 72);"></div><div class="pal-cell" data-c="#E55B47" style="background: rgb(229, 91, 71);"></div><div class="pal-cell" data-c="#F08A6E" style="background: rgb(240, 138, 110);"></div><div class="pal-cell" data-c="#FFB89B" style="background: rgb(255, 184, 155);"></div><div class="pal-cell" data-c="#FFD8C2" style="background: rgb(255, 216, 194);"></div><div class="pal-cell" data-c="#FFD93D" style="background: rgb(255, 217, 61);"></div><div class="pal-cell" data-c="#FFC857" style="background: rgb(255, 200, 87);"></div><div class="pal-cell" data-c="#FFA94D" style="background: rgb(255, 169, 77);"></div><div class="pal-cell" data-c="#FF8730" style="background: rgb(255, 135, 48);"></div><div class="pal-cell" data-c="#E8F5D0" style="background: rgb(232, 245, 208);"></div><div class="pal-cell" data-c="#C5E384" style="background: rgb(197, 227, 132);"></div><div class="pal-cell" data-c="#9DCB5C" style="background: rgb(157, 203, 92);"></div><div class="pal-cell" data-c="#6FAF3A" style="background: rgb(111, 175, 58);"></div><div class="pal-cell" data-c="#4A8B2D" style="background: rgb(74, 139, 45);"></div><div class="pal-cell" data-c="#2E5F1F" style="background: rgb(46, 95, 31);"></div><div class="pal-cell" data-c="#1F3F12" style="background: rgb(31, 63, 18);"></div><div class="pal-cell" data-c="#F0F8FF" style="background: rgb(240, 248, 255);"></div><div class="pal-cell" data-c="#E8F4FF" style="background: rgb(232, 244, 255);"></div><div class="pal-cell" data-c="#BFDFFF" style="background: rgb(191, 223, 255);"></div><div class="pal-cell" data-c="#8BB8E8" style="background: rgb(139, 184, 232);"></div><div class="pal-cell" data-c="#5C8FCC" style="background: rgb(92, 143, 204);"></div><div class="pal-cell" data-c="#3D6FA8" style="background: rgb(61, 111, 168);"></div><div class="pal-cell" data-c="#1F4A7C" style="background: rgb(31, 74, 124);"></div><div class="pal-cell" data-c="#D4B6E8" style="background: rgb(212, 182, 232);"></div><div class="pal-cell" data-c="#A881C5" style="background: rgb(168, 129, 197);"></div><div class="pal-cell" data-c="#7C5BA0" style="background: rgb(124, 91, 160);"></div><div class="pal-cell" data-c="#553B7A" style="background: rgb(85, 59, 122);"></div><div class="pal-cell" data-c="#FFE0E0" style="background: rgb(255, 224, 224);"></div><div class="pal-cell" data-c="#FFD0D0" style="background: rgb(255, 208, 208);"></div><div class="pal-cell" data-c="#FF9090" style="background: rgb(255, 144, 144);"></div><div class="pal-cell" data-c="#E55050" style="background: rgb(229, 80, 80);"></div><div class="pal-cell" data-c="#A02020" style="background: rgb(160, 32, 32);"></div><div class="pal-cell" data-c="#FFFFFF" style="background: rgb(255, 255, 255);"></div><div class="pal-cell" data-c="#E0DDD5" style="background: rgb(224, 221, 213);"></div><div class="pal-cell" data-c="#B5B0A4" style="background: rgb(181, 176, 164);"></div><div class="pal-cell" data-c="#888373" style="background: rgb(136, 131, 115);"></div><div class="pal-cell" data-c="#4F4B40" style="background: rgb(79, 75, 64);"></div><div class="pal-cell" data-c="#2A2722" style="background: rgb(42, 39, 34);"></div><div class="pal-cell" data-c="#1A1815" style="background: rgb(26, 24, 21);"></div><div class="pal-cell on" data-c="#000000" style="background: rgb(0, 0, 0);"></div></div>
     </div>
 
@@ -1372,6 +1409,9 @@ const state = {
   scrubTick: -1,
   // ツールバー左右入れ替え
   toolbarSwapped: false,
+  // FILL PALETTE フローティング
+  paletteFloat: false,
+  paletteFloatPos: null, // {left,top}
   // ズームとパン
   zoom: 1,
   fitMode: true,
@@ -2323,6 +2363,36 @@ function hexToRgb(hex){
     g: parseInt(h.substr(2,2), 16),
     b: parseInt(h.substr(4,2), 16),
   };
+}
+function rgbToHex(r,g,b){
+  const c = n => Math.max(0,Math.min(255,n|0)).toString(16).padStart(2,'0');
+  return ('#' + c(r) + c(g) + c(b)).toUpperCase();
+}
+
+// スポイト: キャンバス座標の「見えている色」を上から合成して取得
+// 描画レイヤー → FRAMEレイヤー(可視時) → 参照ANIMATOR層 → 背景(白) の順に不透明を探す
+function sampleCompositeColor(cx, cy){
+  if(cx < 0 || cy < 0 || cx >= CFG.WORK_W || cy >= CFG.WORK_H) return null;
+  const layers = [];
+  layers.push(drawCtx);
+  if(state.frameLayer && state.frameLayer.visible) layers.push(frameLayerCtx);
+  if(state.refAnimators && state.refAnimators.length) layers.push(refLayerCtx);
+  for(const c of layers){
+    try{
+      const d = c.getImageData(cx, cy, 1, 1).data;
+      if(d[3] > 8) return rgbToHex(d[0], d[1], d[2]);
+    }catch(e){}
+  }
+  // どのレイヤーも透明 → 背景（白基調）
+  return '#FFFFFF';
+}
+// スポイトで色を取得して FILL PALETTE に取り込む
+function eyedropAt(clientX, clientY){
+  const {x, y} = toCanvasCoord(clientX, clientY);
+  const hex = sampleCompositeColor(x, y);
+  if(!hex) return;
+  state.fillColor = hex;
+  setPickedSwatch(hex);
 }
 
 // ============================================================
@@ -3460,7 +3530,9 @@ stage.addEventListener('pointerdown', e => {
   else if(touchPtrs.size > tTapMaxFingers){ tTapMaxFingers = touchPtrs.size; }
 
   if(touchPtrs.size === 1){
-    if(state.tool === 'fill'){
+    if(state.tool === 'eyedrop'){
+      eyedropAt(e.clientX, e.clientY);
+    } else if(state.tool === 'fill'){
       const {x, y} = toCanvasCoord(e.clientX, e.clientY);
       floodFill(x, y, state.fillColor);
       if(state.frameLayer.editMode) pushFrameLayerHistory();
@@ -3631,7 +3703,9 @@ drawCanvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   drawCanvas.setPointerCapture(e.pointerId);
   drawingPointerId = e.pointerId;
-  if(state.tool === 'fill'){
+  if(state.tool === 'eyedrop' || e.altKey){
+    eyedropAt(e.clientX, e.clientY);
+  } else if(state.tool === 'fill'){
     const {x, y} = toCanvasCoord(e.clientX, e.clientY);
     floodFill(x, y, state.fillColor);
     if(state.frameLayer.editMode) pushFrameLayerHistory();
@@ -3710,6 +3784,71 @@ if(swapBtn){
   });
 }
 
+// スポイトで取り込んだ色をパレットのスウォッチに反映
+function setPickedSwatch(hex){
+  const sw = document.getElementById('picked-swatch');
+  if(sw){ sw.style.background = hex; sw.title = 'スポイト取り込み色: ' + hex; }
+  document.querySelectorAll('.pal-cell').forEach(p => {
+    p.classList.toggle('on', (p.dataset.c || '').toUpperCase() === hex.toUpperCase());
+  });
+}
+
+// FILL PALETTE フローティング切替
+function applyPaletteFloat(){
+  const app = document.getElementById('app');
+  const pnl = document.getElementById('palette-pnl');
+  app.classList.toggle('palette-float', state.paletteFloat);
+  pnl.classList.toggle('floating', state.paletteFloat);
+  const btn = document.getElementById('btn-palette-float');
+  if(btn) btn.textContent = state.paletteFloat ? '⤡' : '⤢';
+  if(state.paletteFloat && state.paletteFloatPos){
+    pnl.style.left = state.paletteFloatPos.left + 'px';
+    pnl.style.top  = state.paletteFloatPos.top + 'px';
+    pnl.style.right = 'auto';
+  } else if(!state.paletteFloat){
+    pnl.style.left = ''; pnl.style.top = ''; pnl.style.right = '';
+  }
+  if(typeof fitToStage === 'function') requestAnimationFrame(() => fitToStage());
+}
+const paletteFloatBtn = document.getElementById('btn-palette-float');
+if(paletteFloatBtn){
+  paletteFloatBtn.addEventListener('click', () => {
+    state.paletteFloat = !state.paletteFloat;
+    applyPaletteFloat();
+    if(typeof markMetaDirty === 'function') markMetaDirty();
+    scheduleSave();
+  });
+}
+// フローティング時はヘッダドラッグで移動
+(function(){
+  const pnl = document.getElementById('palette-pnl');
+  const head = document.getElementById('palette-head');
+  let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  head.addEventListener('pointerdown', e => {
+    if(!state.paletteFloat) return;
+    if(e.target.id === 'btn-palette-float') return;
+    dragging = true;
+    const r = pnl.getBoundingClientRect();
+    sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
+    pnl.style.left = ox + 'px'; pnl.style.top = oy + 'px'; pnl.style.right = 'auto';
+    head.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  head.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    pnl.style.left = (ox + e.clientX - sx) + 'px';
+    pnl.style.top  = Math.max(0, oy + e.clientY - sy) + 'px';
+  });
+  head.addEventListener('pointerup', () => {
+    if(!dragging) return;
+    dragging = false;
+    const r = pnl.getBoundingClientRect();
+    state.paletteFloatPos = { left: Math.round(r.left), top: Math.round(r.top) };
+    if(typeof markMetaDirty === 'function') markMetaDirty();
+    scheduleSave();
+  });
+})();
+
 // PEN ボタン ダブルクリック → 筆圧ペン ON/OFF
 const penToolBtn = document.querySelector('.tool[data-tool="pen"]');
 if(penToolBtn){
@@ -3776,6 +3915,8 @@ PALETTE_48.forEach((c, i) => {
     document.querySelectorAll('.pal-cell').forEach(p => p.classList.remove('on'));
     cell.classList.add('on');
     state.fillColor = c;
+    const sw = document.getElementById('picked-swatch');
+    if(sw){ sw.style.background = c; }
     // パレット選択時に自動でfillツールに切り替え
     document.querySelector('.tool[data-tool="fill"]').click();
   });
@@ -4426,6 +4567,8 @@ async function flushSave(){
       cellBaseW: state.cellBaseW,
       cellStretchPerTick: state.cellStretchPerTick,
       toolbarSwapped: state.toolbarSwapped,
+      paletteFloat: state.paletteFloat,
+      paletteFloatPos: state.paletteFloatPos,
       frameLayer: {
         visible: state.frameLayer.visible,
         opacity: state.frameLayer.opacity,
@@ -4529,6 +4672,8 @@ async function loadProject(){
     if(typeof meta.cellBaseW === 'number') state.cellBaseW = meta.cellBaseW;
     if(typeof meta.cellStretchPerTick === 'number') state.cellStretchPerTick = meta.cellStretchPerTick;
     if(typeof meta.toolbarSwapped === 'boolean') state.toolbarSwapped = meta.toolbarSwapped;
+    if(typeof meta.paletteFloat === 'boolean') state.paletteFloat = meta.paletteFloat;
+    if(meta.paletteFloatPos && typeof meta.paletteFloatPos === 'object') state.paletteFloatPos = meta.paletteFloatPos;
 
     // UI反映
     document.getElementById('fps-input').value = state.fps;
@@ -5319,6 +5464,8 @@ window.addEventListener('resize', () => {
     if(sb) sb.classList.add('on');
     fitToStage();
   }
+  // FILL PALETTE フローティング復元
+  if(state.paletteFloat) applyPaletteFloat();
   // 参照ANIMATOR復元
   await loadRefs();
   // 初回保存

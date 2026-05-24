@@ -1449,6 +1449,8 @@ const state = {
   mirrorOn: false,
   // ミラー軸 (x座標, キャンバス座標系)。デフォルトは中央。
   mirrorAxisX: 1024,
+  mirrorAxisY: 576,
+  mirrorAxis: 'v', // 'v'=垂直軸（左右対称） / 'h'=水平軸（上下対称）
   // TIME表示単位: 'frames'=コマ数, 'seconds'=秒
   timeUnit: 'frames',
   // 直前の操作種別: 'canvas' | 'timeline' → undo/redo のターゲット切替に使用
@@ -2150,19 +2152,35 @@ function updateMirrorGuide(){
   if(!guide) return;
   if(!state.mirrorOn){ guide.style.display = 'none'; return; }
   guide.style.display = 'block';
-  // canvas-wrap の画面上の bounding rect から軸の screen X を計算
+  guide.style.pointerEvents = 'auto';
+  guide.style.transform = 'none';
   const stageRect = stage.getBoundingClientRect();
   const wrapRect  = wrap.getBoundingClientRect();
-  let screenX;
-  if(state.flipped){
-    // flip時: mirrorAxisX は canvas右から数える
-    screenX = wrapRect.right - state.mirrorAxisX * state.zoom;
+  if(state.mirrorAxis === 'h'){
+    // 水平軸: 上下対称、画面上に横線
+    const screenY = wrapRect.top + state.mirrorAxisY * state.zoom;
+    const top = screenY - stageRect.top;
+    guide.style.left = '0';
+    guide.style.right = '0';
+    guide.style.width = '';
+    guide.style.top = top + 'px';
+    guide.style.bottom = '';
+    guide.style.height = '1px';
+    guide.style.cursor = 'ns-resize';
   } else {
-    screenX = wrapRect.left + state.mirrorAxisX * state.zoom;
+    // 垂直軸: 左右対称、画面上に縦線
+    let screenX = state.flipped
+      ? wrapRect.right - state.mirrorAxisX * state.zoom
+      : wrapRect.left  + state.mirrorAxisX * state.zoom;
+    const left = screenX - stageRect.left;
+    guide.style.top = '0';
+    guide.style.bottom = '0';
+    guide.style.height = '';
+    guide.style.left = left + 'px';
+    guide.style.right = '';
+    guide.style.width = '1px';
+    guide.style.cursor = 'ew-resize';
   }
-  const guideLeft = screenX - stageRect.left;
-  guide.style.left = guideLeft + 'px';
-  guide.style.transform = 'none';
 }
 
 // ============================================================
@@ -2183,6 +2201,14 @@ function toCanvasCoord(clientX, clientY){
 function mirrorX(x){
   const axis = state.mirrorAxisX || (CFG.WORK_W / 2);
   return Math.max(0, Math.min(CFG.WORK_W - 1, Math.round(axis * 2 - x)));
+}
+function mirrorY(y){
+  const axis = state.mirrorAxisY || (CFG.WORK_H / 2);
+  return Math.max(0, Math.min(CFG.WORK_H - 1, Math.round(axis * 2 - y)));
+}
+// 現在のミラー軸に応じた対称点を返す
+function mirrorPt(x, y){
+  return state.mirrorAxis === 'h' ? { x, y: mirrorY(y) } : { x: mirrorX(x), y };
 }
 
 // ============================================================
@@ -2456,9 +2482,25 @@ function snapshotTL(){
 }
 
 // タイムライン操作後に呼ぶ（AFTER変更）
+// 構造比較（id/kind/duration/hidden/drawDataの参照同一性）で連続同一スナップを排除
+function tlSnapEquals(a, b){
+  if(!a || !b || a.length !== b.length) return false;
+  for(let i = 0; i < a.length; i++){
+    const x = a[i], y = b[i];
+    if(x.id !== y.id || x.kind !== y.kind || x.duration !== y.duration || !!x.hidden !== !!y.hidden) return false;
+    if(x.kind === 'draw' && x.drawData !== y.drawData) return false;
+  }
+  return true;
+}
 function pushTimelineHistory(){
+  const snap = snapshotTL();
+  // 末尾と等価ならスキップ（無駄な「効かないUndo」を防止）
+  if(tlHistIdx >= 0 && tlSnapEquals(tlHistory[tlHistIdx], snap)){
+    state.lastEditWas = 'timeline';
+    return;
+  }
   if(tlHistIdx < tlHistory.length - 1) tlHistory.splice(tlHistIdx + 1);
-  tlHistory.push(snapshotTL());
+  tlHistory.push(snap);
   if(tlHistory.length > TL_HIST_MAX) tlHistory.shift();
   tlHistIdx = tlHistory.length - 1;
   state.lastEditWas = 'timeline';
@@ -3649,14 +3691,14 @@ function startStroke(clientX, clientY, pressure){
     if(usePressure){
       lastR = pressureRadius(pressure);
       drawDotRadius(ctx, x, y, lastR, INK[state.inkColor]);
-      if(state.mirrorOn) drawDotRadius(ctx, mirrorX(x), y, lastR, INK[state.inkColor]);
+      if(state.mirrorOn){ const m = mirrorPt(x, y); drawDotRadius(ctx, m.x, m.y, lastR, INK[state.inkColor]); }
     } else {
       drawDot(ctx, x, y, currentToolSize(), INK[state.inkColor]);
-      if(state.mirrorOn) drawDot(ctx, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
+      if(state.mirrorOn){ const m = mirrorPt(x, y); drawDot(ctx, m.x, m.y, currentToolSize(), INK[state.inkColor]); }
     }
   } else if(state.tool === 'erase'){
     eraseDot(ctx, x, y, currentToolSize());
-    if(state.mirrorOn) eraseDot(ctx, mirrorX(x), y, currentToolSize());
+    if(state.mirrorOn){ const m = mirrorPt(x, y); eraseDot(ctx, m.x, m.y, currentToolSize()); }
   }
 }
 function continueStroke(clientX, clientY, pressure){
@@ -3668,15 +3710,24 @@ function continueStroke(clientX, clientY, pressure){
     if(usePressure){
       const r = pressureRadius(pressure);
       drawLineRadius(ctx, lastX, lastY, x, y, lastR, r, INK[state.inkColor]);
-      if(state.mirrorOn) drawLineRadius(ctx, mirrorX(lastX), lastY, mirrorX(x), y, lastR, r, INK[state.inkColor]);
+      if(state.mirrorOn){
+        const m0 = mirrorPt(lastX, lastY), m1 = mirrorPt(x, y);
+        drawLineRadius(ctx, m0.x, m0.y, m1.x, m1.y, lastR, r, INK[state.inkColor]);
+      }
       lastR = r;
     } else {
       drawLine(ctx, lastX, lastY, x, y, currentToolSize(), INK[state.inkColor]);
-      if(state.mirrorOn) drawLine(ctx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize(), INK[state.inkColor]);
+      if(state.mirrorOn){
+        const m0 = mirrorPt(lastX, lastY), m1 = mirrorPt(x, y);
+        drawLine(ctx, m0.x, m0.y, m1.x, m1.y, currentToolSize(), INK[state.inkColor]);
+      }
     }
   } else if(state.tool === 'erase'){
     eraseLine(ctx, lastX, lastY, x, y, currentToolSize());
-    if(state.mirrorOn) eraseLine(ctx, mirrorX(lastX), lastY, mirrorX(x), y, currentToolSize());
+    if(state.mirrorOn){
+      const m0 = mirrorPt(lastX, lastY), m1 = mirrorPt(x, y);
+      eraseLine(ctx, m0.x, m0.y, m1.x, m1.y, currentToolSize());
+    }
   }
   lastX = x; lastY = y;
 }
@@ -3794,16 +3845,27 @@ function setPickedSwatch(hex){
 }
 
 // FILL PALETTE フローティング切替
+// フローティング時は #side が display:none で畳まれるため、パレット本体を
+// body 直下に取り出す（戻すときは #side に戻す）。これで非表示にならない。
 function applyPaletteFloat(){
   const app = document.getElementById('app');
   const pnl = document.getElementById('palette-pnl');
+  const side = document.getElementById('side');
   app.classList.toggle('palette-float', state.paletteFloat);
   pnl.classList.toggle('floating', state.paletteFloat);
+  if(state.paletteFloat){
+    if(pnl.parentElement !== document.body) document.body.appendChild(pnl);
+  } else {
+    if(side && pnl.parentElement !== side) side.appendChild(pnl);
+  }
   const btn = document.getElementById('btn-palette-float');
   if(btn) btn.textContent = state.paletteFloat ? '⤡' : '⤢';
   if(state.paletteFloat && state.paletteFloatPos){
-    pnl.style.left = state.paletteFloatPos.left + 'px';
-    pnl.style.top  = state.paletteFloatPos.top + 'px';
+    // 画面外復元の保険（width/height は CSS）
+    const left = Math.max(0, Math.min(window.innerWidth - 80, state.paletteFloatPos.left|0));
+    const top  = Math.max(0, Math.min(window.innerHeight - 40, state.paletteFloatPos.top|0));
+    pnl.style.left = left + 'px';
+    pnl.style.top  = top + 'px';
     pnl.style.right = 'auto';
   } else if(!state.paletteFloat){
     pnl.style.left = ''; pnl.style.top = ''; pnl.style.right = '';
@@ -4569,6 +4631,9 @@ async function flushSave(){
       toolbarSwapped: state.toolbarSwapped,
       paletteFloat: state.paletteFloat,
       paletteFloatPos: state.paletteFloatPos,
+      mirrorAxis: state.mirrorAxis,
+      mirrorAxisX: state.mirrorAxisX,
+      mirrorAxisY: state.mirrorAxisY,
       frameLayer: {
         visible: state.frameLayer.visible,
         opacity: state.frameLayer.opacity,
@@ -4674,6 +4739,9 @@ async function loadProject(){
     if(typeof meta.toolbarSwapped === 'boolean') state.toolbarSwapped = meta.toolbarSwapped;
     if(typeof meta.paletteFloat === 'boolean') state.paletteFloat = meta.paletteFloat;
     if(meta.paletteFloatPos && typeof meta.paletteFloatPos === 'object') state.paletteFloatPos = meta.paletteFloatPos;
+    if(meta.mirrorAxis === 'h' || meta.mirrorAxis === 'v') state.mirrorAxis = meta.mirrorAxis;
+    if(typeof meta.mirrorAxisX === 'number') state.mirrorAxisX = meta.mirrorAxisX;
+    if(typeof meta.mirrorAxisY === 'number') state.mirrorAxisY = meta.mirrorAxisY;
 
     // UI反映
     document.getElementById('fps-input').value = state.fps;
@@ -5161,6 +5229,44 @@ document.getElementById('btn-mirror').addEventListener('click', e => {
   e.target.classList.toggle('on', state.mirrorOn);
   updateMirrorGuide();
 });
+// MIRROR ダブルクリック → 垂直/水平 軸トグル
+document.getElementById('btn-mirror').addEventListener('dblclick', () => {
+  state.mirrorAxis = state.mirrorAxis === 'h' ? 'v' : 'h';
+  // 切替時に軸位置を中央に再設定すると分かりやすい
+  if(state.mirrorAxis === 'h') state.mirrorAxisY = CFG.WORK_H / 2;
+  else state.mirrorAxisX = CFG.WORK_W / 2;
+  if(!state.mirrorOn){ state.mirrorOn = true; document.getElementById('btn-mirror').classList.add('on'); }
+  updateMirrorGuide();
+  markMetaDirty(); scheduleSave();
+});
+
+// MIRROR ガイドラインをドラッグして軸位置を移動
+(function(){
+  const guide = document.getElementById('mirror-guide');
+  if(!guide) return;
+  let dragging = false;
+  guide.addEventListener('pointerdown', e => {
+    if(!state.mirrorOn) return;
+    dragging = true;
+    guide.setPointerCapture(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  });
+  guide.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    const { x, y } = toCanvasCoord(e.clientX, e.clientY);
+    if(state.mirrorAxis === 'h'){
+      state.mirrorAxisY = Math.max(0, Math.min(CFG.WORK_H, y));
+    } else {
+      state.mirrorAxisX = Math.max(0, Math.min(CFG.WORK_W, x));
+    }
+    updateMirrorGuide();
+  });
+  guide.addEventListener('pointerup', () => {
+    if(!dragging) return; dragging = false;
+    markMetaDirty(); scheduleSave();
+  });
+  guide.addEventListener('pointercancel', () => { dragging = false; });
+})();
 
 // FRAMEレイヤー UI
 document.getElementById('btn-frame-edit').addEventListener('click', () => {

@@ -212,6 +212,13 @@ let tlHistIdx = -1;
 - SPLITボタンは廃止。Sキーのみ（カーソル下=state.scrubTickで分割）
 - timeline-cursor に透明ヒットエリア（::after 幅18px）追加でつかみやすく
 - ホイール拡縮は zoomAt() をステージ中心基準の逆写像に修正（カーソル下が動かない）
+- FILL PALETTEフローティング時、palette pnl を body 直下に物理的に移動（#side が
+  display:none で畳まれて palette まで非表示になる問題を修正）。ドッキング時は #side に戻す
+- MIRRORのガイドラインをドラッグで移動可能に（mirrorAxisX/Y を更新）。
+  MIRROR ボタンをダブルクリックで 垂直軸 ⇄ 水平軸 を切替。mirrorAxis/mirrorAxisX/mirrorAxisY を
+  meta に永続化。描画は mirrorPt(x,y) を介して両軸対応
+- pushTimelineHistory に等価判定を追加し、同一スナップの重複登録を排除
+  （「Undoが何度か効かない」感の軽減）
 
 ## 次回実装候補（優先度おまかせ）
 

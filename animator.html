@@ -1642,6 +1642,7 @@ async function addRefAnimator(json, fallbackName){
     source: src,
   });
   buildRefList();
+  updateTimeTrack();
   renderRefLayer();
   saveRefs();
 }
@@ -1651,6 +1652,7 @@ function removeRefAnimator(id){
   if(i < 0) return;
   state.refAnimators.splice(i, 1);
   buildRefList();
+  updateTimeTrack();
   renderRefLayer();
   saveRefs();
 }
@@ -1659,6 +1661,7 @@ function toggleRefVis(id){
   if(!r) return;
   r.visible = !r.visible;
   buildRefList();
+  updateTimeTrack();
   renderRefLayer();
   saveRefs();
 }
@@ -1851,6 +1854,7 @@ async function loadRefs(){
       });
     }
     buildRefList();
+    updateTimeTrack();
     renderRefLayer();
   }catch(e){ console.warn('loadRefs failed', e); }
 }
@@ -2875,6 +2879,24 @@ function cellWidthFor(duration){
 function totalTicks(){
   return state.frames.reduce((s, f) => s + f.duration, 0);
 }
+// 表示中REFの最長ティック数（REFが手元プロジェクトより長い場合の延長用）
+function maxRefTicks(){
+  let m = 0;
+  for(const r of state.refAnimators){
+    if(!r.visible || !r.ticks) continue;
+    const n = r.totalTicks || r.ticks.length;
+    if(n > m) m = n;
+  }
+  return m;
+}
+// 手元プロジェクトとREF最長の大きい方（タイムライン自動延長の基準）
+function effectiveTotalTicks(){
+  return Math.max(totalTicks(), maxRefTicks());
+}
+// ワークエリアが手元の全尺をカバーしている（=フルレンジ）か
+function workAreaIsFull(){
+  return state.workStart <= 0 && state.workEnd >= totalTicks();
+}
 // 最大コマ数（=最大15秒×fps）
 function maxTicks(){
   return CFG.MAX_DURATION_SEC * state.fps;
@@ -2911,7 +2933,8 @@ function tickToPx(tick){
     acc += f.duration;
     pxAcc += cellWidthFor(f.duration) + 3;
   }
-  return pxAcc;
+  // 手元フレームより先（REF延長分）は cellStretchPerTick で外挿
+  return pxAcc + Math.max(0, tick - acc) * state.cellStretchPerTick;
 }
 // あるピクセルxに対応するtick
 function pxToTick(px){
@@ -2925,7 +2948,9 @@ function pxToTick(px){
     pxAcc += w + 3;
     tickAcc += f.duration;
   }
-  return tickAcc;
+  // 末尾より先（REF延長分）は cellStretchPerTick で外挿
+  const per = state.cellStretchPerTick || 1;
+  return tickAcc + Math.max(0, Math.round((px - pxAcc) / per));
 }
 
 // ストリップDOM構築
@@ -3369,12 +3394,14 @@ function scrollFrameIntoView(idx){
 function updateTimeTrack(){
   const inner = document.getElementById('time-track-inner');
   if(!inner) return;
-  const totalPx = timelineTotalPx();
+  // REFが手元より長い場合はタイムラインを延長表示
+  const effTotal = effectiveTotalTicks();
+  const totalPx = Math.max(timelineTotalPx(), tickToPx(effTotal) + 4);
   inner.style.width = totalPx + 'px';
   // 既存の目盛を削除して再構築
   inner.querySelectorAll('.time-tick').forEach(el => el.remove());
 
-  const total = totalTicks();
+  const total = effTotal;
   const fps = state.fps;
   // ズームレベルに応じて小目盛間隔を変える（1コマ単位まで対応）
   const pxPerTick = state.cellStretchPerTick;
@@ -3418,7 +3445,9 @@ function updateTimeTrack(){
   const workArea = document.getElementById('work-area');
   if(workArea){
     const sx = tickToPx(state.workStart);
-    const ex = tickToPx(state.workEnd);
+    // フルレンジ時はREF延長分まで帯を伸ばし、再生範囲を可視化
+    const endT = workAreaIsFull() ? effTotal : state.workEnd;
+    const ex = tickToPx(endT);
     workArea.style.left = sx + 'px';
     workArea.style.width = Math.max(0, ex - sx) + 'px';
   }
@@ -3520,8 +3549,9 @@ function play(){
   const tickMs = 1000 / state.fps;
   // ワークエリア範囲のtick
   const startTick = state.workStart;
-  const endTick = state.workEnd; // exclusive
-  const rangeTicks = endTick - startTick;
+  // フルレンジ時はREF延長分まで再生（手元が短くてもREFを最後まで流す）
+  const endTick = workAreaIsFull() ? Math.max(state.workEnd, maxRefTicks()) : state.workEnd; // exclusive
+  const rangeTicks = Math.max(1, endTick - startTick);
 
   // 範囲内のtickから idx と「実描画フレームidx」を返す
   // 空ブロックの場合は直前のdrawフレームを返す
@@ -5104,9 +5134,10 @@ function setupCursorScrub(){
     if(!inner) return;
     const rect = inner.getBoundingClientRect();
     const px = clientX - rect.left;
-    const tick = Math.max(0, Math.min(totalTicks() - 1, Math.round(pxToTick(px))));
+    // REF延長分まではスクラブ可能（手元フレームの範囲外でもREFをプレビュー）
+    const tick = Math.max(0, Math.min(effectiveTotalTicks() - 1, Math.round(pxToTick(px))));
     state.scrubTick = tick; // SPLITのクリック位置分割に使用
-    // tickに対応するフレームを探して切替
+    // tickに対応するフレームを探して切替（手元の範囲内のみ）
     let acc = 0;
     for(let i = 0; i < state.frames.length; i++){
       acc += state.frames[i].duration;
@@ -5115,6 +5146,8 @@ function setupCursorScrub(){
         break;
       }
     }
+    // REFはスクラブ位置のティックでライブプレビュー（手元尺を超えても追従）
+    if(state.refAnimators.length) renderRefLayer(tick);
     // カーソル位置を即時更新
     cursor.style.left = tickToPx(tick) + 'px';
   }

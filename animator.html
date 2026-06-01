@@ -35,7 +35,7 @@ html,body{
 
 #app{
   display:grid;
-  grid-template-columns:72px 1fr 240px;
+  grid-template-columns:72px 1fr 96px;
   grid-template-rows:36px 1fr 130px 32px;
   grid-template-areas:
     "top  top   top"
@@ -52,7 +52,7 @@ html,body{
 #bottombar{grid-area:bot;}
 /* ツールバー左右入れ替え（列幅とエリアを反転。stageは常に中央） */
 #app.swapped{
-  grid-template-columns:240px 1fr 72px;
+  grid-template-columns:96px 1fr 72px;
   grid-template-areas:
     "top  top   top"
     "side stage tool"
@@ -246,6 +246,8 @@ html,body{
   z-index:10;
 }
 #stage-info b{color:var(--acid);font-weight:400;}
+#info-res{pointer-events:auto;cursor:pointer;}
+#info-res:hover{color:#fff;text-decoration:underline;}
 
 #canvas-wrap{
   position:relative;
@@ -427,33 +429,44 @@ html,body{
 #side::-webkit-scrollbar-thumb{background:rgba(54,255,0,0.3);}
 .pnl{
   border-bottom:1px solid var(--border);
-  padding:12px 14px;
+  padding:8px 8px;
 }
 .pnl-h{
   font-size:9px;letter-spacing:0.3em;
   color:rgba(54,255,0,0.6);
-  margin-bottom:10px;
-  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+  display:flex;align-items:center;justify-content:flex-end;gap:6px;
 }
 .pnl-h .v{color:var(--white);font-size:10px;letter-spacing:0.05em;}
-.pnl-h-r{display:flex;align-items:center;gap:8px;}
+.pnl-h-r{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;}
 .picked-swatch{
   width:16px;height:16px;border:1px solid rgba(255,255,255,0.3);
   background:#000;display:inline-block;border-radius:1px;
 }
 .pnl-detach{
   background:transparent;border:1px solid var(--border);
-  color:rgba(255,255,255,0.5);font-family:var(--mono);font-size:11px;
-  width:20px;height:18px;cursor:pointer;line-height:1;transition:all 0.12s;
+  color:rgba(255,255,255,0.5);font-family:var(--mono);font-size:10px;
+  width:16px;height:18px;cursor:pointer;line-height:1;padding:0;transition:all 0.12s;
 }
 .pnl-detach:hover{color:var(--acid);border-color:var(--border-bright);}
-/* FILL PALETTE フローティング */
+/* FILL PALETTE フローティング（3列・縦長） */
 #palette-pnl.floating{
-  position:fixed;top:90px;left:auto;right:24px;width:228px;z-index:120;
+  position:fixed;top:90px;left:auto;right:24px;width:132px;z-index:120;
   background:rgba(8,8,8,0.96);border:1px solid var(--border-bright);
   box-shadow:0 8px 40px rgba(0,0,0,0.7);
+  display:flex;flex-direction:column;
 }
 #palette-pnl.floating .pnl-h{cursor:move;}
+#palette-pnl.floating #palette{overflow-y:auto;}
+#palette-pnl.floating #palette::-webkit-scrollbar{width:4px;}
+#palette-pnl.floating #palette::-webkit-scrollbar-thumb{background:rgba(54,255,0,0.3);}
+/* 下端リサイズグリップ（フローティング時のみ） */
+#palette-resize{display:none;height:11px;cursor:ns-resize;align-items:center;justify-content:center;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);flex:0 0 auto;}
+#palette-resize::after{content:'';width:26px;height:2px;background:rgba(255,255,255,0.25);}
+#palette-pnl.floating #palette-resize{display:flex;}
+/* 設定パネル 下端リサイズグリップ */
+#settings-resize{height:11px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);}
+#settings-resize::after{content:'';width:28px;height:2px;background:rgba(255,255,255,0.25);}
 #app.palette-float{ grid-template-columns:72px 1fr 0; }
 #app.palette-float.swapped{
   grid-template-columns:0 1fr 72px;
@@ -507,19 +520,27 @@ html,body{
 .ink-btn[data-c="blue"]{background:#a8d8ff;color:#003;}
 .ink-btn[data-c="orange"]{background:#ffb060;color:#420;}
 
-/* パレット（塗りつぶし48色） */
+/* パレット（カスタム可・チップは固定サイズ／列数は幅に追従） */
 .palette{
   display:grid;
-  grid-template-columns:repeat(8,1fr);
-  gap:2px;
+  grid-template-columns:repeat(auto-fill,26px);
+  gap:3px;
+  justify-content:center;
+  align-content:start;
 }
 .pal-cell{
-  aspect-ratio:1;
+  width:26px;height:26px;
   cursor:pointer;
   border:1px solid transparent;
-  transition:all 0.1s;
+  transition:transform 0.1s,border-color 0.1s;
   position:relative;
 }
+.pal-cell.add-slot{
+  border:1px dashed rgba(255,255,255,0.25);
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,0.4);font-size:14px;background:transparent;
+}
+.pal-cell.add-slot:hover{border-color:var(--acid);color:var(--acid);transform:none;}
 .pal-cell:hover{transform:scale(1.15);z-index:2;}
 .pal-cell.on{
   border-color:var(--acid);
@@ -1062,7 +1083,7 @@ input[type=range]::-moz-range-thumb{
   .tb-ink{height:28px;}
   .pen-btn{height:44px;}
   .ink-btn{height:38px;}
-  #app{grid-template-columns:78px 1fr 240px;}
+  #app{grid-template-columns:78px 1fr 96px;}
 }
 
 /* iPad縦持ち時はサイドパネルを下に */
@@ -1110,7 +1131,7 @@ input[type=range]::-moz-range-thumb{
       <button id="btn-import-json" title="JSONファイルを読み込み（既存プロジェクトを置換）">IMPORT JSON</button>
       <input type="file" id="json-file-input" accept="application/json,.json" style="display:none;">
       <span class="sep">/</span>
-      <button id="btn-send-composer" title="現在のプロジェクトを共有DB経由でCOMPOSERに送る">→ COMPOSER</button>
+      <button id="btn-send-composer" title="COMPOSERを別ウィンドウで開く（ANIMATORは開いたまま・LIVE連携）">→ COMPOSER</button>
       <button id="btn-live" title="COMPOSER未接続（COMPOSERを開くと自動でライブ連携）">LIVE ○</button>
       <button id="btn-home" title="ランディングページに戻る">HOME</button>
     </div>
@@ -1195,6 +1216,7 @@ input[type=range]::-moz-range-thumb{
       <canvas class="layer" id="bg-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="ref-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="frame-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px; display: none; opacity: 1;"></canvas>
+      <canvas class="layer" id="refimg-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="onion-prev" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="onion-next" width="2048" height="1152" style="width: 842.457px; height: 473.882px;"></canvas>
       <canvas class="layer" id="draw-layer" width="2048" height="1152" style="width: 842.457px; height: 473.882px; opacity: 1; cursor: crosshair;"></canvas>
@@ -1219,13 +1241,17 @@ input[type=range]::-moz-range-thumb{
     <!-- 塗りパレット -->
     <div class="pnl" id="palette-pnl">
       <div class="pnl-h" id="palette-head">
-        <span>FILL PALETTE</span>
         <span class="pnl-h-r">
-          <span class="picked-swatch" id="picked-swatch" title="スポイトで取り込んだ色"></span>
+          <button class="pnl-detach" id="btn-pal-add" title="色スロットを追加（選択してスポイトで色を取り込み）">＋</button>
+          <button class="pnl-detach" id="btn-pal-del" title="選択中の色スロットを削除">−</button>
+          <button class="pnl-detach" id="btn-pal-save" title="パレットをJSONで書き出し">⇩</button>
+          <button class="pnl-detach" id="btn-pal-load" title="パレットJSONを読み込み">⇧</button>
           <button class="pnl-detach" id="btn-palette-float" title="フローティング切替（切り離し/ドッキング）">⤢</button>
+          <input type="file" id="pal-file-input" accept="application/json,.json" style="display:none;">
         </span>
       </div>
       <div class="palette" id="palette"><div class="pal-cell" data-c="#FFF0E0" style="background: rgb(255, 240, 224);"></div><div class="pal-cell" data-c="#FCE5CE" style="background: rgb(252, 229, 206);"></div><div class="pal-cell" data-c="#F8C99B" style="background: rgb(248, 201, 155);"></div><div class="pal-cell" data-c="#E8A87C" style="background: rgb(232, 168, 124);"></div><div class="pal-cell" data-c="#C68863" style="background: rgb(198, 136, 99);"></div><div class="pal-cell" data-c="#3B2C2A" style="background: rgb(59, 44, 42);"></div><div class="pal-cell" data-c="#5C3A36" style="background: rgb(92, 58, 54);"></div><div class="pal-cell" data-c="#8B4543" style="background: rgb(139, 69, 67);"></div><div class="pal-cell" data-c="#C04848" style="background: rgb(192, 72, 72);"></div><div class="pal-cell" data-c="#E55B47" style="background: rgb(229, 91, 71);"></div><div class="pal-cell" data-c="#F08A6E" style="background: rgb(240, 138, 110);"></div><div class="pal-cell" data-c="#FFB89B" style="background: rgb(255, 184, 155);"></div><div class="pal-cell" data-c="#FFD8C2" style="background: rgb(255, 216, 194);"></div><div class="pal-cell" data-c="#FFD93D" style="background: rgb(255, 217, 61);"></div><div class="pal-cell" data-c="#FFC857" style="background: rgb(255, 200, 87);"></div><div class="pal-cell" data-c="#FFA94D" style="background: rgb(255, 169, 77);"></div><div class="pal-cell" data-c="#FF8730" style="background: rgb(255, 135, 48);"></div><div class="pal-cell" data-c="#E8F5D0" style="background: rgb(232, 245, 208);"></div><div class="pal-cell" data-c="#C5E384" style="background: rgb(197, 227, 132);"></div><div class="pal-cell" data-c="#9DCB5C" style="background: rgb(157, 203, 92);"></div><div class="pal-cell" data-c="#6FAF3A" style="background: rgb(111, 175, 58);"></div><div class="pal-cell" data-c="#4A8B2D" style="background: rgb(74, 139, 45);"></div><div class="pal-cell" data-c="#2E5F1F" style="background: rgb(46, 95, 31);"></div><div class="pal-cell" data-c="#1F3F12" style="background: rgb(31, 63, 18);"></div><div class="pal-cell" data-c="#F0F8FF" style="background: rgb(240, 248, 255);"></div><div class="pal-cell" data-c="#E8F4FF" style="background: rgb(232, 244, 255);"></div><div class="pal-cell" data-c="#BFDFFF" style="background: rgb(191, 223, 255);"></div><div class="pal-cell" data-c="#8BB8E8" style="background: rgb(139, 184, 232);"></div><div class="pal-cell" data-c="#5C8FCC" style="background: rgb(92, 143, 204);"></div><div class="pal-cell" data-c="#3D6FA8" style="background: rgb(61, 111, 168);"></div><div class="pal-cell" data-c="#1F4A7C" style="background: rgb(31, 74, 124);"></div><div class="pal-cell" data-c="#D4B6E8" style="background: rgb(212, 182, 232);"></div><div class="pal-cell" data-c="#A881C5" style="background: rgb(168, 129, 197);"></div><div class="pal-cell" data-c="#7C5BA0" style="background: rgb(124, 91, 160);"></div><div class="pal-cell" data-c="#553B7A" style="background: rgb(85, 59, 122);"></div><div class="pal-cell" data-c="#FFE0E0" style="background: rgb(255, 224, 224);"></div><div class="pal-cell" data-c="#FFD0D0" style="background: rgb(255, 208, 208);"></div><div class="pal-cell" data-c="#FF9090" style="background: rgb(255, 144, 144);"></div><div class="pal-cell" data-c="#E55050" style="background: rgb(229, 80, 80);"></div><div class="pal-cell" data-c="#A02020" style="background: rgb(160, 32, 32);"></div><div class="pal-cell" data-c="#FFFFFF" style="background: rgb(255, 255, 255);"></div><div class="pal-cell" data-c="#E0DDD5" style="background: rgb(224, 221, 213);"></div><div class="pal-cell" data-c="#B5B0A4" style="background: rgb(181, 176, 164);"></div><div class="pal-cell" data-c="#888373" style="background: rgb(136, 131, 115);"></div><div class="pal-cell" data-c="#4F4B40" style="background: rgb(79, 75, 64);"></div><div class="pal-cell" data-c="#2A2722" style="background: rgb(42, 39, 34);"></div><div class="pal-cell" data-c="#1A1815" style="background: rgb(26, 24, 21);"></div><div class="pal-cell on" data-c="#000000" style="background: rgb(0, 0, 0);"></div></div>
+      <div id="palette-resize" title="ドラッグで高さ調整（フローティング時）"></div>
     </div>
 
   </div>
@@ -1302,14 +1328,28 @@ input[type=range]::-moz-range-thumb{
       <div class="ref-frame-row">
         <button id="btn-frame-edit" class="ref-btn" title="このレイヤーに直接描画するモード（ON中は下絵に描ける）">EDIT</button>
         <button id="btn-frame-clear" class="ref-btn del" title="FRAMEレイヤーをクリア">CLR</button>
-        <button id="btn-frame-img" class="ref-btn" title="参照画像をFRAMEレイヤーに読み込み">IMG</button>
       </div>
       <div class="ref-op-row" style="margin-top:6px;">
         <span class="ref-op-tag">表示</span>
         <input type="range" id="frame-opacity" min="0" max="100" value="40" title="FRAMEレイヤーの表示濃度（0=非表示）">
         <span class="ref-op-val" id="frame-opacity-val">40%</span>
       </div>
-      <input type="file" id="frame-img-input" accept="image/*" style="display:none;">
+    </div>
+    <!-- 参照画像（原寸・中央・ドラッグ移動/拡縮） -->
+    <div class="ref-sect">
+      <div class="ref-sect-h">REF IMAGE（原寸・中央・移動）</div>
+      <div class="ref-frame-row">
+        <button id="btn-refimg-load" class="ref-btn" title="参照画像を読み込み（原寸・中央）">LOAD</button>
+        <button id="btn-refimg-move" class="ref-btn" title="ドラッグで移動／ホイールで拡縮するモード">MOVE</button>
+        <button id="btn-refimg-fit" class="ref-btn" title="原寸(1:1)＆中央に戻す">中央</button>
+        <button id="btn-refimg-clear" class="ref-btn del" title="参照画像を消去">×</button>
+      </div>
+      <div class="ref-op-row" style="margin-top:6px;">
+        <span class="ref-op-tag">表示</span>
+        <input type="range" id="refimg-opacity" min="0" max="100" value="60" title="参照画像の表示濃度（0=非表示）">
+        <span class="ref-op-val" id="refimg-opacity-val">60%</span>
+      </div>
+      <input type="file" id="refimg-input" accept="image/*" style="display:none;">
     </div>
     <!-- 参照ANIMATOR（複数ANIMATORをコマ同期で重ね表示） -->
     <div class="ref-sect">
@@ -1371,6 +1411,7 @@ input[type=range]::-moz-range-thumb{
       <button id="shortcut-reset" class="ref-btn" style="width:100%;margin-top:8px;padding:5px 0;">RESET DEFAULTS</button>
     </div>
   </div>
+  <div id="settings-resize" title="ドラッグで高さ調整（下のセクションを隠せます）"></div>
 </div>
 
 <!-- MODAL DIALOG -->
@@ -1506,6 +1547,11 @@ const state = {
   guides: {
     resOn: false, resW: 1920, resH: 1080,   // 解像度枠（出力クロップの目安）
     safeOn: false, safeA: 90, safeB: 80,     // セーフフレーム（解像度枠に対する%）
+  },
+  // 参照画像（原寸・中央・移動可。書き出し非合成）
+  refImg: {
+    img: null, src: null, x: 0, y: 0, scale: 1,
+    opacity: 0.6, visible: true, moveMode: false,
   },
   // ズームとパン
   zoom: 1,
@@ -2186,6 +2232,8 @@ const onionPrev  = document.getElementById('onion-prev');
 const onionNext  = document.getElementById('onion-next');
 const frameLayerCanvas = document.getElementById('frame-layer');
 const refLayerCanvas = document.getElementById('ref-layer');
+const refImgLayerCanvas = document.getElementById('refimg-layer');
+const refImgCtx = refImgLayerCanvas.getContext('2d');
 const guideLayerCanvas = document.getElementById('guide-layer');
 const guideCtx = guideLayerCanvas.getContext('2d');
 const refLayerCtx = refLayerCanvas.getContext('2d');
@@ -2197,7 +2245,7 @@ const frameLayerCtx = frameLayerCanvas.getContext('2d', { willReadFrequently: tr
 
 // 内部解像度設定
 function setupCanvas(){
-  [bgCanvas, drawCanvas, onionPrev, onionNext, frameLayerCanvas, refLayerCanvas, guideLayerCanvas].forEach(c => {
+  [bgCanvas, drawCanvas, onionPrev, onionNext, frameLayerCanvas, refLayerCanvas, refImgLayerCanvas, guideLayerCanvas].forEach(c => {
     c.width  = CFG.WORK_W;
     c.height = CFG.WORK_H;
   });
@@ -2237,7 +2285,7 @@ function applyZoom(){
   const sx = state.flipped ? -1 : 1;
   wrap.style.transform = `translate(${state.panX}px, ${state.panY}px) scaleX(${sx})`;
   wrap.style.transformOrigin = '50% 50%';
-  [bgCanvas, drawCanvas, onionPrev, onionNext, frameLayerCanvas, refLayerCanvas, guideLayerCanvas].forEach(c => {
+  [bgCanvas, drawCanvas, onionPrev, onionNext, frameLayerCanvas, refLayerCanvas, refImgLayerCanvas, guideLayerCanvas].forEach(c => {
     c.style.width  = w + 'px';
     c.style.height = h + 'px';
   });
@@ -2247,7 +2295,88 @@ function applyZoom(){
     Math.round(state.zoom*100)+'%';
   updateMirrorGuide();
   renderGuides();
+  renderRefImg();
 }
+
+// 参照画像（原寸・中央・移動可）を描画。書き出しには含めない
+function renderRefImg(){
+  if(!refImgCtx) return;
+  refImgCtx.clearRect(0, 0, CFG.WORK_W, CFG.WORK_H);
+  const r = state.refImg;
+  if(!r || !r.img || !r.visible || r.opacity <= 0) return;
+  refImgCtx.imageSmoothingEnabled = true;
+  refImgCtx.globalAlpha = r.opacity;
+  const w = r.img.naturalWidth * r.scale, h = r.img.naturalHeight * r.scale;
+  try{ refImgCtx.drawImage(r.img, r.x, r.y, w, h); }catch(e){}
+  refImgCtx.globalAlpha = 1;
+}
+// 参照画像レイヤーの表示スタイル（不透明度0や非表示時はDOM非表示）
+function applyRefImgStyle(){
+  const r = state.refImg;
+  const shown = !!(r.img && r.visible && r.opacity > 0);
+  refImgLayerCanvas.style.display = shown ? 'block' : 'none';
+}
+// dataURL/objectURL から参照画像を読み込み（keepTransform=false で原寸・中央に配置）
+function loadRefImageFromSrc(src, keepTransform){
+  return new Promise(resolve => {
+    if(!src){ state.refImg.img = null; state.refImg.src = null; renderRefImg(); applyRefImgStyle(); resolve(); return; }
+    const im = new Image();
+    im.onload = () => {
+      state.refImg.img = im; state.refImg.src = src;
+      if(!keepTransform){
+        state.refImg.scale = 1;
+        state.refImg.x = Math.round((CFG.WORK_W - im.naturalWidth) / 2);
+        state.refImg.y = Math.round((CFG.WORK_H - im.naturalHeight) / 2);
+        state.refImg.visible = true;
+      }
+      renderRefImg(); applyRefImgStyle(); applyRefImgUI();
+      resolve();
+    };
+    im.onerror = () => resolve();
+    im.src = src;
+  });
+}
+// 原寸(1:1)＆中央に戻す
+function refImgCenter(){
+  const r = state.refImg;
+  if(!r.img) return;
+  r.scale = 1;
+  r.x = Math.round((CFG.WORK_W - r.img.naturalWidth) / 2);
+  r.y = Math.round((CFG.WORK_H - r.img.naturalHeight) / 2);
+  renderRefImg(); markMetaDirty(); scheduleSave();
+}
+// カーソル基点でスケール
+function refImgScaleAt(clientX, clientY, factor){
+  const r = state.refImg; if(!r.img) return;
+  const { x:wx, y:wy } = toCanvasCoord(clientX, clientY);
+  const ns = Math.max(0.05, Math.min(12, r.scale * factor));
+  const k = ns / r.scale;
+  r.x = wx - (wx - r.x) * k;
+  r.y = wy - (wy - r.y) * k;
+  r.scale = ns;
+  renderRefImg(); markMetaDirty(); scheduleSave();
+}
+// ドラッグ移動
+let refDragging = false, refDragStart = null;
+function refDragBegin(clientX, clientY){
+  refDragging = true;
+  refDragStart = { cx:clientX, cy:clientY, x:state.refImg.x, y:state.refImg.y };
+}
+function refDragMove(clientX, clientY){
+  if(!refDragging) return;
+  let dx = (clientX - refDragStart.cx) / (state.zoom || 1);
+  const dy = (clientY - refDragStart.cy) / (state.zoom || 1);
+  if(state.flipped) dx = -dx;
+  state.refImg.x = Math.round(refDragStart.x + dx);
+  state.refImg.y = Math.round(refDragStart.y + dy);
+  renderRefImg();
+}
+function refDragEnd(){
+  if(!refDragging) return;
+  refDragging = false;
+  markMetaDirty(); scheduleSave();
+}
+function refImgActive(){ return !!(state.refImg.moveMode && state.refImg.img); }
 
 // 解像度枠 / セーフフレームのガイドを描画（表示のみ・書き出しには含めない）
 function renderGuides(){
@@ -2630,6 +2759,7 @@ function sampleCompositeColor(cx, cy){
   if(cx < 0 || cy < 0 || cx >= CFG.WORK_W || cy >= CFG.WORK_H) return null;
   const layers = [];
   layers.push(drawCtx);
+  if(state.refImg && state.refImg.img && state.refImg.visible && state.refImg.opacity > 0) layers.push(refImgCtx);
   if(state.frameLayer && state.frameLayer.visible) layers.push(frameLayerCtx);
   if(state.refAnimators && state.refAnimators.length) layers.push(refLayerCtx);
   for(const c of layers){
@@ -2647,7 +2777,12 @@ function eyedropAt(clientX, clientY){
   const hex = sampleCompositeColor(x, y);
   if(!hex) return;
   state.fillColor = hex;
-  setPickedSwatch(hex);
+  // 選択中のパレットスロットへ上書き（カスタムパレット化）
+  if(typeof gPalette !== 'undefined' && gPalSlot >= 0 && gPalSlot < gPalette.length){
+    gPalette[gPalSlot] = hex;
+    savePalette();
+    renderPalette();
+  }
 }
 
 // ============================================================
@@ -3900,7 +4035,9 @@ stage.addEventListener('pointerdown', e => {
   else if(touchPtrs.size > tTapMaxFingers){ tTapMaxFingers = touchPtrs.size; }
 
   if(touchPtrs.size === 1){
-    if(state.tool === 'eyedrop'){
+    if(refImgActive()){
+      refDragBegin(e.clientX, e.clientY);
+    } else if(state.tool === 'eyedrop'){
       eyedropAt(e.clientX, e.clientY);
     } else if(state.tool === 'fill'){
       if(state.frameLayer.editMode) ensureFlBaseline();
@@ -3940,6 +4077,7 @@ stage.addEventListener('pointermove', e => {
   if(!p) return;
   p.x = e.clientX; p.y = e.clientY;
 
+  if(refDragging && touchPtrs.size === 1){ refDragMove(e.clientX, e.clientY); return; }
   if(tPinching && touchPtrs.size >= 2){
     const pts = Array.from(touchPtrs.values());
     const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
@@ -3968,6 +4106,7 @@ function stageTouchEnd(e){
   if(!p) return;
   touchPtrs.delete(e.pointerId);
 
+  if(refDragging){ refDragEnd(); }
   if(tPinching && touchPtrs.size < 2) tPinching = false;
   if(tPanning && e.pointerId === tPanId) tPanning = false;
   if(drawing && e.pointerId === drawingPointerId) endStroke();
@@ -4085,6 +4224,7 @@ drawCanvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   drawCanvas.setPointerCapture(e.pointerId);
   drawingPointerId = e.pointerId;
+  if(refImgActive()){ refDragBegin(e.clientX, e.clientY); return; } // 参照画像の移動モード
   if(state.tool === 'eyedrop' || e.altKey){
     eyedropAt(e.clientX, e.clientY);
   } else if(state.tool === 'fill'){
@@ -4100,6 +4240,7 @@ drawCanvas.addEventListener('pointerdown', e => {
 
 drawCanvas.addEventListener('pointermove', e => {
   if(e.pointerType === 'touch') return;
+  if(refDragging){ refDragMove(e.clientX, e.clientY); return; }
   const {x, y} = toCanvasCoord(e.clientX, e.clientY);
   document.getElementById('hud-coord').textContent = `${x} · ${y}`;
   if(drawing && e.pointerId === drawingPointerId){
@@ -4110,6 +4251,7 @@ drawCanvas.addEventListener('pointermove', e => {
 
 function onPenEnd(e){
   if(e.pointerType === 'touch') return;
+  if(refDragging){ refDragEnd(); return; }
   if(drawing && e.pointerId === drawingPointerId) endStroke();
 }
 drawCanvas.addEventListener('pointerup', onPenEnd);
@@ -4198,6 +4340,9 @@ function applyPaletteFloat(){
     pnl.style.right = 'auto';
   } else if(!state.paletteFloat){
     pnl.style.left = ''; pnl.style.top = ''; pnl.style.right = '';
+    // ドッキング時はリサイズで付けた高さ指定を解除（自然な高さに戻す）
+    const pal = document.getElementById('palette');
+    if(pal){ pal.style.height = ''; pal.style.maxHeight = ''; }
   }
   if(typeof fitToStage === 'function') requestAnimationFrame(() => fitToStage());
 }
@@ -4217,7 +4362,7 @@ if(paletteFloatBtn){
   let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
   head.addEventListener('pointerdown', e => {
     if(!state.paletteFloat) return;
-    if(e.target.id === 'btn-palette-float') return;
+    if(e.target.closest('button')) return; // ヘッダ内ボタンはドラッグ開始しない
     dragging = true;
     const r = pnl.getBoundingClientRect();
     sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
@@ -4292,26 +4437,88 @@ document.querySelectorAll('.tb-ink').forEach(btn => {
   });
 });
 
-// パレット生成
+// ── FILL PALETTE（カスタム可・データ駆動）──
+const PAL_LS = 'animator_palette_v1';
+let gPalette = PALETTE_48.slice();
+let gPalSlot = gPalette.length - 1; // 選択中スロット（スポイトの上書き先）
 const palEl = document.getElementById('palette');
-palEl.innerHTML = ''; // 静的HTMLの重複セルを除去（JSが唯一の生成元）
-PALETTE_48.forEach((c, i) => {
-  const cell = document.createElement('div');
-  cell.className = 'pal-cell';
-  cell.style.background = c;
-  cell.dataset.c = c;
-  if(i === 47) cell.classList.add('on'); // 黒を初期選択
-  state.fillColor = PALETTE_48[47];
-  cell.addEventListener('click', () => {
-    document.querySelectorAll('.pal-cell').forEach(p => p.classList.remove('on'));
-    cell.classList.add('on');
-    state.fillColor = c;
-    const sw = document.getElementById('picked-swatch');
-    if(sw){ sw.style.background = c; }
-    // パレット選択時に自動でfillツールに切り替え
-    document.querySelector('.tool[data-tool="fill"]').click();
+
+function loadPalette(){
+  try{
+    const raw = localStorage.getItem(PAL_LS);
+    if(raw){
+      const o = JSON.parse(raw);
+      const cols = Array.isArray(o) ? o : (o && Array.isArray(o.colors) ? o.colors : null);
+      if(cols && cols.length){
+        gPalette = cols.filter(c=>typeof c==='string').map(c=>c[0]==='#'?c:('#'+c));
+      }
+    }
+  }catch(e){}
+  if(!gPalette.length) gPalette = PALETTE_48.slice();
+  gPalSlot = Math.min(Math.max(0, gPalSlot), gPalette.length-1);
+}
+function savePalette(){ try{ localStorage.setItem(PAL_LS, JSON.stringify({format:'PALETTE_v1', colors:gPalette})); }catch(e){} }
+function selectPalSlot(i){
+  gPalSlot = i;
+  state.fillColor = gPalette[i];
+  renderPalette();
+  const fb = document.querySelector('.tool[data-tool="fill"]'); if(fb) fb.click();
+}
+function renderPalette(){
+  palEl.innerHTML = '';
+  gPalette.forEach((c, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'pal-cell' + (i===gPalSlot ? ' on' : '');
+    cell.style.background = c;
+    cell.dataset.c = c;
+    cell.title = c + '（クリックで選択／スポイトでこのスロットに上書き）';
+    cell.addEventListener('click', () => selectPalSlot(i));
+    palEl.appendChild(cell);
   });
-  palEl.appendChild(cell);
+}
+loadPalette();
+state.fillColor = gPalette[gPalSlot] || '#000000';
+renderPalette();
+
+// ＋ スロット追加
+document.getElementById('btn-pal-add').addEventListener('click', () => {
+  gPalette.push('#808080');
+  gPalSlot = gPalette.length - 1;
+  state.fillColor = gPalette[gPalSlot];
+  savePalette(); renderPalette();
+  const fb = document.querySelector('.tool[data-tool="fill"]'); if(fb) fb.click();
+});
+// − 選択中スロットを削除（最低1色は残す）
+document.getElementById('btn-pal-del').addEventListener('click', () => {
+  if(gPalette.length <= 1) return;
+  gPalette.splice(gPalSlot, 1);
+  gPalSlot = Math.min(gPalSlot, gPalette.length - 1);
+  state.fillColor = gPalette[gPalSlot];
+  savePalette(); renderPalette();
+});
+// ⇩ パレット書き出し（JSON）
+document.getElementById('btn-pal-save').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify({format:'PALETTE_v1', colors:gPalette}, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href = url; a.download = `palette_${ts}.json`; a.click();
+  URL.revokeObjectURL(url);
+});
+// ⇧ パレット読み込み（JSON）
+document.getElementById('btn-pal-load').addEventListener('click', () => document.getElementById('pal-file-input').click());
+document.getElementById('pal-file-input').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0]; e.target.value='';
+  if(!file) return;
+  try{
+    const o = JSON.parse(await file.text());
+    const cols = Array.isArray(o) ? o : (o && Array.isArray(o.colors) ? o.colors : null);
+    if(!cols || !cols.length){ await modalAlert('パレットJSONに colors がありません'); return; }
+    gPalette = cols.filter(c=>typeof c==='string').map(c=>c[0]==='#'?c:('#'+c));
+    gPalSlot = Math.min(gPalSlot, gPalette.length-1);
+    state.fillColor = gPalette[gPalSlot];
+    savePalette(); renderPalette();
+  }catch(err){ await modalAlert('読み込み失敗: '+(err.message||err)); }
 });
 
 // ============================================================
@@ -4408,8 +4615,9 @@ document.getElementById('zoom-fit').addEventListener('click', fitToStage);
 // ホイールズーム（Ctrl不要、Altは予約）
 stage.addEventListener('wheel', e => {
   if(e.altKey) return; // Alt+ホイールはセル幅伸縮側で使用
-  e.preventDefault();
   const factor = e.deltaY > 0 ? 0.9 : 1.111;
+  if(refImgActive()){ e.preventDefault(); refImgScaleAt(e.clientX, e.clientY, factor); return; }
+  e.preventDefault();
   zoomAt(e.clientX, e.clientY, state.zoom * factor);
 }, { passive: false });
 
@@ -4670,6 +4878,9 @@ async function applyProjectJSON(json){
     await loadFrameLayerFromDataURL(null);
   }
   applyFrameLayerStyle();
+  // 参照画像は新規プロジェクト読込でクリア（前プロジェクトの残留防止）
+  state.refImg.img = null; state.refImg.src = null; state.refImg.moveMode = false;
+  if(typeof renderRefImg === 'function'){ renderRefImg(); applyRefImgStyle(); applyRefImgUI(); }
   renderRefLayer();
   updateResLabel();
   fitToStage();
@@ -4775,11 +4986,32 @@ function buildProjectPayload(){
   };
 }
 
+let gComposerWin = null; // 開いたCOMPOSERウィンドウ参照（再クリックで使い回し）
 document.getElementById('btn-send-composer').addEventListener('click', async () => {
   try{
     const payload = buildProjectPayload();
     await exPut(payload);
-    location.href = 'composer.html?id=' + encodeURIComponent(payload.projectId);
+    // ライブ連携を有効化＆最新をブロードキャスト
+    gLiveActive = true;
+    if(typeof updateLiveUI === 'function') updateLiveUI();
+    if(typeof broadcastProjectNow === 'function') broadcastProjectNow();
+    // 既にCOMPOSERを開いている場合はリロードせず前面化（合成作業を保持）
+    if(gComposerWin && !gComposerWin.closed){ try{ gComposerWin.focus(); }catch(e){} return; }
+    const url = 'composer.html?id=' + encodeURIComponent(payload.projectId);
+    // ANIMATORは開いたまま、できれば画面右半分にCOMPOSERを開く
+    const sw = screen.availWidth || window.innerWidth;
+    const sh = screen.availHeight || window.innerHeight;
+    const w = Math.floor(sw / 2);
+    const feat = `width=${w},height=${sh},left=${sw - w},top=0`;
+    gComposerWin = window.open(url, 'tdr_composer', feat);
+    if(!gComposerWin){
+      // ポップアップブロック時は同タブ遷移にフォールバック
+      if(await modalConfirm('別ウィンドウを開けませんでした（ポップアップ許可が必要）。\nこのタブでCOMPOSERを開きますか？')){
+        location.href = url;
+      }
+    } else {
+      try{ gComposerWin.focus(); }catch(e){}
+    }
   }catch(err){
     alert('COMPOSERへの送信に失敗: ' + err.message);
   }
@@ -5020,6 +5252,10 @@ async function flushSave(){
       paletteFloatPos: state.paletteFloatPos,
       workW: CFG.WORK_W, workH: CFG.WORK_H,
       guides: { ...state.guides },
+      refImg: state.refImg.src ? {
+        src: state.refImg.src, x: state.refImg.x, y: state.refImg.y,
+        scale: state.refImg.scale, opacity: state.refImg.opacity, visible: state.refImg.visible,
+      } : null,
       mirrorAxis: state.mirrorAxis,
       mirrorAxisX: state.mirrorAxisX,
       mirrorAxisY: state.mirrorAxisY,
@@ -5143,6 +5379,14 @@ async function loadProject(){
     if(typeof meta.paletteFloat === 'boolean') state.paletteFloat = meta.paletteFloat;
     if(meta.paletteFloatPos && typeof meta.paletteFloatPos === 'object') state.paletteFloatPos = meta.paletteFloatPos;
     if(meta.guides && typeof meta.guides === 'object') state.guides = Object.assign(state.guides, meta.guides);
+    if(meta.refImg && typeof meta.refImg === 'object' && meta.refImg.src){
+      state.refImg.x = meta.refImg.x|0;
+      state.refImg.y = meta.refImg.y|0;
+      state.refImg.scale = (typeof meta.refImg.scale==='number') ? meta.refImg.scale : 1;
+      state.refImg.opacity = (typeof meta.refImg.opacity==='number') ? meta.refImg.opacity : 0.6;
+      state.refImg.visible = meta.refImg.visible !== false;
+      await loadRefImageFromSrc(meta.refImg.src, true); // 変形を保持して復元
+    }
     if(meta.mirrorAxis === 'h' || meta.mirrorAxis === 'v') state.mirrorAxis = meta.mirrorAxis;
     if(typeof meta.mirrorAxisX === 'number') state.mirrorAxisX = meta.mirrorAxisX;
     if(typeof meta.mirrorAxisY === 'number') state.mirrorAxisY = meta.mirrorAxisY;
@@ -5699,35 +5943,48 @@ document.getElementById('btn-frame-clear').addEventListener('click', () => {
   pushFrameLayerHistory();
 });
 
-// 参照画像をFRAMEレイヤーに読み込み（contain フィット、センタリング）
-document.getElementById('btn-frame-img').addEventListener('click', () => {
-  document.getElementById('frame-img-input').click();
-});
-document.getElementById('frame-img-input').addEventListener('change', e => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
+// ── REF IMAGE（原寸・中央・ドラッグ移動/拡縮）UI ──
+function applyRefImgUI(){
+  const r = state.refImg;
+  const mv = document.getElementById('btn-refimg-move');
+  if(mv) mv.classList.toggle('on', r.moveMode);
+  const op = document.getElementById('refimg-opacity');
+  const ov = document.getElementById('refimg-opacity-val');
+  if(op && document.activeElement !== op) op.value = Math.round(r.opacity*100);
+  if(ov) ov.textContent = Math.round(r.opacity*100)+'%';
+}
+function fileToDataURL(file){
+  return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej(fr.error); fr.readAsDataURL(file); });
+}
+document.getElementById('btn-refimg-load').addEventListener('click', () => document.getElementById('refimg-input').click());
+document.getElementById('refimg-input').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0]; e.target.value='';
   if(!file) return;
-  const url = URL.createObjectURL(file);
-  const im = new Image();
-  im.onload = () => {
-    ensureFlBaseline(); // 画像読込前の状態をUndo用に確保
-    const cw = CFG.WORK_W, ch = CFG.WORK_H;
-    const scale = Math.min(cw / im.width, ch / im.height);
-    const dw = Math.round(im.width * scale);
-    const dh = Math.round(im.height * scale);
-    const dx = Math.round((cw - dw) / 2);
-    const dy = Math.round((ch - dh) / 2);
-    frameLayerCtx.clearRect(0, 0, cw, ch);
-    frameLayerCtx.drawImage(im, dx, dy, dw, dh);
-    URL.revokeObjectURL(url);
-    // 自動で表示ON・FRAMEモード維持
-    state.frameLayer.visible = true;
-    applyFrameLayerStyle();
-    pushFrameLayerHistory();
-  };
-  im.onerror = () => URL.revokeObjectURL(url);
-  im.src = url;
+  try{
+    const url = await fileToDataURL(file);
+    await loadRefImageFromSrc(url, false); // 原寸・中央で配置
+    markMetaDirty(); scheduleSave();
+  }catch(err){ await modalAlert('画像の読み込みに失敗しました'); }
 });
+document.getElementById('btn-refimg-move').addEventListener('click', () => {
+  if(!state.refImg.img){ modalAlert('先に LOAD で参照画像を読み込んでください'); return; }
+  state.refImg.moveMode = !state.refImg.moveMode;
+  applyRefImgUI();
+  drawCanvas.style.cursor = state.refImg.moveMode ? 'move' : ((state.tool==='fill')?'cell':'crosshair');
+});
+document.getElementById('btn-refimg-fit').addEventListener('click', refImgCenter);
+document.getElementById('btn-refimg-clear').addEventListener('click', () => {
+  state.refImg.img = null; state.refImg.src = null; state.refImg.moveMode = false;
+  renderRefImg(); applyRefImgStyle(); applyRefImgUI();
+  drawCanvas.style.cursor = (state.tool==='fill')?'cell':'crosshair';
+  markMetaDirty(); scheduleSave();
+});
+document.getElementById('refimg-opacity').addEventListener('input', e => {
+  state.refImg.opacity = Math.max(0, Math.min(1, (parseInt(e.target.value,10)||0)/100));
+  document.getElementById('refimg-opacity-val').textContent = Math.round(state.refImg.opacity*100)+'%';
+  renderRefImg(); applyRefImgStyle();
+});
+document.getElementById('refimg-opacity').addEventListener('change', () => { markMetaDirty(); scheduleSave(); });
 document.getElementById('btn-add-frame').addEventListener('click', () => addFrame(false));
 document.getElementById('btn-dup-frame').addEventListener('click', () => addFrame(true));
 document.getElementById('btn-del-frame').addEventListener('click', deleteCurrentFrame);
@@ -5859,6 +6116,7 @@ const SHORTCUT_ACTIONS = [
   { id:'mirror',    label:'MIRROR',             def:'M',          run:()=>document.getElementById('btn-mirror')?.click() },
   { id:'flip',      label:'FLIP',               def:'X',          run:()=>document.getElementById('btn-flip')?.click() },
   { id:'refPanel',  label:'REFパネル',          def:'R',          run:()=>toggleRefPanel() },
+  { id:'settings',  label:'設定パネル',         def:',',          run:()=>toggleSettingsPanel() },
   { id:'swap',      label:'ツールバー左右入替', def:'Tab',        prevent:true, run:()=>toggleToolbarSwap() },
 ];
 const SC_BY_ID = Object.fromEntries(SHORTCUT_ACTIONS.map(a=>[a.id,a]));
@@ -6024,8 +6282,60 @@ document.querySelectorAll('.sg-preset').forEach(b=>{
 // 左上の解像度ラベルクリックで設定パネルを開く
 (function(){
   const lbl=document.getElementById('info-res');
-  if(lbl){ lbl.style.cursor='pointer'; lbl.title='クリックで作業キャンバスサイズを変更'; lbl.addEventListener('click', ()=>toggleSettingsPanel(true)); }
+  if(lbl){ lbl.style.cursor='pointer'; lbl.title='クリックで設定パネル開閉（作業キャンバスサイズ変更）'; lbl.addEventListener('click', ()=>toggleSettingsPanel()); }
 })();
+
+// ── パネル下端リサイズ（設定パネル / フローティングパレット）──
+function makeVResize(handle, target, opts){
+  if(!handle || !target) return;
+  opts = opts || {};
+  let active=false, startY=0, startH=0;
+  handle.addEventListener('pointerdown', e=>{
+    active=true; startY=e.clientY; startH=target.getBoundingClientRect().height;
+    handle.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation();
+  });
+  handle.addEventListener('pointermove', e=>{
+    if(!active) return;
+    const max=opts.max?opts.max():Infinity;
+    const h=Math.min(max, Math.max(opts.min||60, startH + (e.clientY - startY)));
+    target.style.maxHeight='none'; target.style.height=h+'px';
+  });
+  function end(){
+    if(!active) return; active=false;
+    if(opts.snap){ const s=opts.snap(target.getBoundingClientRect().height); if(s!=null) target.style.height=s+'px'; }
+  }
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}
+// 設定パネル本体が画面内に収まる最大高さ（グリップが画面外に出ないように）
+function settingsMaxHeight(){
+  const body=document.getElementById('settings-panel-body');
+  const top=body.getBoundingClientRect().top;
+  return Math.max(80, window.innerHeight - top - 24); // 24=グリップ＋余白
+}
+// 設定パネル: セクション境界（段）でスナップ。ただし画面内に収まる範囲に制限
+function settingsSnapHeight(curH){
+  const body=document.getElementById('settings-panel-body');
+  const sects=[...body.querySelectorAll('.ref-sect')];
+  if(!sects.length) return null;
+  const maxH=settingsMaxHeight();
+  const padB=parseFloat(getComputedStyle(body).paddingBottom)||0;
+  const bounds=sects.map(s => Math.min(maxH, (s.offsetTop - body.offsetTop) + s.offsetHeight + padB));
+  bounds.push(Math.min(maxH, body.scrollHeight)); // 一番下＝画面に収まる最大（超過分は内部スクロール）
+  let best=bounds[0], bd=Infinity;
+  for(const b of bounds){ const d=Math.abs(b-curH); if(d<bd){ bd=d; best=b; } }
+  return Math.max(60, Math.round(best));
+}
+makeVResize(document.getElementById('settings-resize'), document.getElementById('settings-panel-body'), { min:60, max:settingsMaxHeight, snap:settingsSnapHeight });
+makeVResize(document.getElementById('palette-resize'), document.getElementById('palette'), { min:60 });
+
+// ── フローティングパネル: クリックしたものを最前面に ──
+let gPanelZ = 140;
+function raisePanel(el){ if(el) el.style.zIndex = ++gPanelZ; }
+['palette-pnl','settings-panel','ref-panel'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('pointerdown', ()=>raisePanel(el), true);
+});
 
 loadKeymap(); // 起動時にキーマップを復元（localStorage）
 
@@ -6130,8 +6440,9 @@ window.addEventListener('resize', () => {
   setupLiveSync();      // COMPOSERとのライブ連携（BroadcastChannel）
   updateLiveUI();
   updateResLabel();     // 読込後の作業キャンバスサイズをラベルに反映
-  fitToStage();         // 復元サイズに合わせて再フィット（applyZoom内でrenderGuidesも実行）
+  fitToStage();         // 復元サイズに合わせて再フィット（applyZoom内でrenderGuides/renderRefImgも実行）
   applyGuideUI();
+  applyRefImgStyle(); applyRefImgUI(); // 参照画像の表示/UIを反映
 })();
 
 // ページ離脱前に強制保存

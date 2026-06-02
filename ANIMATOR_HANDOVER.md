@@ -5,172 +5,171 @@ _新チャット冒頭にこのファイルを貼り付けてください_
 
 ## ⚑ 次チャットへの申し送り（最新・優先）
 
-### 作業環境メモ（重要）
-- 実ファイルは `animator.html`（リポジトリ直下）。`index.html` はランディング。
-- このチャットは git worktree
-  `C:\Users\so173\Documents\Claude\Projects\Animation_Paint\.claude\worktrees\dazzling-meitner-3ee247`
-  で作業し、`origin/master` へは「一時worktreeをorigin/masterから作り、animator.html等をコピー→commit→push」
-  方式でデプロイしている（masterを直接checkoutしない運用）。
+### 作業環境
+- 実ファイルは `animator.html`（リポジトリ直下）。`index.html` はランディング、`composer.html` は合成。
+- **master ブランチで直接作業・push**（worktree 運用は不要）。
 - 反映先 GitHub Pages: https://maso1737.github.io/animation-paint/
 - 変更後は必ず構文チェック:
-  `node -e "const fs=require('fs');const h=fs.readFileSync('animator.html','utf8');const m=[...h.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(x=>x[1]).filter(s=>s.length>200).join('\\n;\\n');new Function(m);console.log('OK')"`
+  ```
+  node -e "const fs=require('fs');const h=fs.readFileSync('animator.html','utf8');const m=[...h.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(s=>s.length>200).join('\n;\n');new Function(m);console.log('OK')"
+  ```
 
-### 直近で対応済み（このチャット）
-- Undo全面刷新（gUndo/gRedoの一元ログ。最後に触った系統を1手ずつ戻す）
-- 「Undoで一気に先頭へ戻る」修正:
-  ①フレーム構造変更の履歴記録漏れを補完（空き末尾追加/コマ数切替/表示切替/空→描画昇格）
-  ②restoreTL を id ベースのマージに変更（構造のみ復元・各コマの絵は生オブジェクト温存）
-- FILL PALETTEフローティング/スポイト/MIRROR軸V-H/SEQ PNG など（下の各セクション参照）
-- **FRAME LAYER の表示ON/OFFボタン（✕/●）を廃止**。可視性はOPACITYスライダー（0=非表示）に一本化。
-  EDITは「下絵に描くモード」専用。EDIT ONで濃度0なら自動で40%に底上げ。
-  applyFrameLayerStyle が `shown = editMode || opacity>0` で表示判定し fl.visible を同期。
+### 未着手・次チャット候補
 
-### ★未解決（次チャットで要対応）— REF ANIMATORS の JSON FILE 読み込み
-- 症状（ユーザー報告）: 「+ JSON FILE で参照を追加すると“初めの画だけ”見えて、
-  ちゃんと読み込まれていない感じ」
-- 調査メモ:
-  - 読み込み経路: `ref-json-input change → addRefAnimator → parseRefSource → expandRefTicks`。
-    expandRefTicks は各cellごとに Image を decode し ticks[] を「1ティック=1画像」で埋める（コード上は全コマ展開される）。
-  - 描画: `renderRefLayer()` が `currentSyncTick()` のティックの画像を ref-layer canvas に合成。
-    非再生時 `currentSyncTick = frameStartTick(state.currentFrame)`（＝現在コマの開始ティック）。
-    つまり**参照は“現在コマの時間位置”に同期**する設計。再生中は再生ティックに追従（loop内 renderRefLayer(tick)）。
-  - したがって、手元プロジェクトのコマ数/尺が短いと参照の先頭ティックしか到達できず
-    「最初の画だけ」に見える可能性がある（仕様の可能性）。
-  - 要確認（ユーザーに依頼）: ①手元プロジェクトの総コマ数、②コマ送り（←→）や再生で参照画が変わるか、
-    ③読み込んだJSONのフォーマット（PROJECT_v1 cells / ANIMATOR_v1 frames）と総コマ数、
-    ④REFリストに出る `Nf`（totalTicks）が想定通りか。
-  - もし「コマ送りしても変わらない＝本当に1枚しか展開されていない」なら expandRefTicks の
-    decode 完了前に renderRefLayer された等のタイミングを疑う（addRefAnimator は await 済みなので考えにくい）。
-    その場合は ticks[] の中身（非null数）をログして切り分ける。
+**すぐできる（小〜中）**
+- **手振れ補正の強化**：`state.smoothing` は4点移動平均で実装済み。pull/lazy-brush 方式への強化が良い。
+- **→ANM 代替動線**：別ANIMATORを安全に別ウィンドウで開く（→COMPOSERと同方式）。現状は IMPORT JSON で手動。
+
+**中規模フェーズ**
+- **INDEX ページにANIMATOR一覧**：IndexedDB のプロジェクト一覧を index.html に表示し、開く/REF参照に追加できる動線。`+ FROM SAVED` の使いにくさを解消する（→「FROM SAVED について」参照）。
+- **ANIMATOR↔COMPOSER 複数窓LIVE管理**：複数ANIMATORを別窓で同時開きのとき、どれがCOMPOSERとLIVE連携するかの帰属管理。
+
+**将来フェーズ（大規模）**
+- **線のコピペ＆選択移動/回転/スケール**（Ctrl矩形・Alt投げ縄）：大規模・見送り中。
+- **ドックマネージャ（UI配置）**：設計コストが大きい。今はフローティング/リサイズで代替。
 
 ---
 
 ## プロジェクト概要
 ブラウザベース・日本アニメ作画特化アニメーションエディタ。
-単一HTMLファイル（`index.html`）、IndexedDB自動保存、Chrome/iPad Safari対応。
+単一HTMLファイル（`animator.html`）、IndexedDB自動保存、Chrome/iPad Safari対応。
+COMPOSERと BroadcastChannel でリアルタイム連携。
 
 ---
 
-## 現在のファイル
-- **最新版**: `index.html`（約130KB）
+## ファイル構成
+- **`animator.html`** — メインの作画エディタ（約265KB）
+- **`composer.html`** — マルチトラック合成（カメラ/KF/書き出し）
+- **`index.html`** — ランディングページ
+- **`CLAUDE.md`** — Claude Code 向けの開発メモ（短縮版）
 - 保存場所: `C:\Users\so173\Documents\Claude\Projects\Animation_Paint\`
 - GitHub: https://github.com/maso1737/animation-paint
-- Pages: https://maso1737.github.io/animation-paint/
 
 ---
 
 ## 技術スタック
-- Canvas 2D（内部解像度 2048×1152、書き出し4K）
+- Canvas 2D（内部解像度可変・上限≒4K面積。各コマは `drawData` Uint8ClampedArray W×H×4）
 - アンチエイリアスOFF、ブレゼンハム直線、自前ピクセル描画
 - Pointer Events API（Apple Pencil / マウス / タッチ 統合）
-- IndexedDB自動保存（差分保存）
-- PWA化は未実施（GitHub Pages → Safari「ホーム画面に追加」で確認中）
+- IndexedDB自動保存（差分・debounce 800ms）
+- BroadcastChannel `tdr_live` によるリアルタイム連携
 
 ---
 
-## 実装済み機能（最新版）
+## レイヤー構成（`#canvas-wrap` 内、上から）
 
-### レイヤー機能（各コマ側にはレイヤーは持たない（軽量化））
-- FRAMEレイヤー: 下書き/参考用レイヤー（白/黒ベタ平面を透明度調整してトレース。書き出しに含まれない）
-- 参照画像読み込み → トレースレイヤーに組込み
+| canvas ID | 用途 | 書き出し |
+|---|---|---|
+| `bg-layer` | 背景（明度スライダー） | ○ |
+| `ref-layer` | REF ANIMATOR（コマ同期） | ✕ |
+| `refimg-layer` | REF IMAGE（原寸・複数・移動可） | ✕ |
+| `frame-layer` | FRAME LAYER（描ける下絵・移動可） | ✕ |
+| `onion-prev/next` | オニオンスキン | ✕ |
+| `draw-layer` | 描画レイヤー | ○ |
+| `guide-layer` | 解像度枠/セーフ（表示のみ） | ✕ |
 
-### 参照ANIMATOR（複数ANIMATOR参照 / REFパネル）
-- topbar `REF` ボタンでフローティングパネル開閉（`#ref-panel`、ヘッダドラッグ移動）
-- 他のANIMATORプロジェクト（PROJECT_v1/ANIMATOR_v1 JSON）を **コマ同期で重ね表示**
-  - 追加元: `+ JSON FILE`（複数選択可） / `+ FROM SAVED`（共有DB tdr_exchange の保存済み）
-  - 各参照: 表示ON/OFF、不透明度スライダー、`→ ANM`（その素材のANIMATORを開く=連携更新）、削除
-- 専用 `#ref-layer` キャンバス（bg-layerの直後、frame-layerの背面）へ毎フレーム合成
-  - `source.cells` を1ティック=1画像へ展開（`expandRefTicks`）。参照側が尽きたら非表示
-  - 現在ティック同期: 非再生時=`frameStartTick(currentFrame)` / 再生時=再生ティック
-  - 書き出し / COMPOSER / オニオン には**含まれない**（純粋に作画参照用）
-- 永続化: IndexedDB `STORE_REFS`（DB_VERSION 3）。変更時のみdebounce保存（描画autosaveとは別系統）
-- 5レイヤー分けの運用: ANIMATORを5本作り、各々で他4本をREF参照。COMPOSERでまとめて同期
+---
+
+## 実装済み機能（最新）
 
 ### キャンバス・描画
 - ペン 1px / 2px / 20px、アンチエイリアスOFF
+- 筆圧ペン（PEN ダブルクリックで黄バッジ ON/OFF）
 - インクカラー 3色（主線黒・下書き水色・指示オレンジ）
-- 消しゴム（ペンと独立してサイズ記憶）
-- 塗りつぶし（スキャンラインフラッドフィル）
-- 48色パレット（右サイドパネル）
-- ストローク補正（4点移動平均）
-- 背景明度縦スライダー（左ツールバー）
-- ピンチズーム＋パン（キャンバス）
-- Undo/Redo（履歴50ステップ、フレーム単位独立）
-- **FLIP**（表示左右反転のみ）/ **MIRROR**（左右対称ペイント、中央軸）
-- ミラーガイドライン（`#mirror-guide`、stageの子要素としてJS座標で配置）
+- 消しゴム（サイズ独立記憶）
+- 塗りつぶし（スキャンラインフラッドフィル。FILL ダブルクリックで透明消しゴムモード）
+- ストローク補正（4点移動平均 / `state.smoothing`）
+- 背景明度縦スライダー
+- ピンチズーム＋パン / FLIP（表示反転） / MIRROR（左右対称・軸ドラッグ・ダブルクリックで垂直⇄水平）
+- **CANVAS SIZE 可変**：左上ラベルクリック→設定パネル。上限≒4K面積。既存の絵は中央フィット保持。
 
-### ツールバー構成
-- **左**: ペン・消し・塗り / サイズ1px・2px・20px / 主線・下書・指示 / BG縦スライダー / UNDO↩ REDO↪ ボタン
-- **右**: 48色FILL PALETTEのみ
-- **トップバー右**: FLIP / MIRROR / EXPORT 4K
+### FILL PALETTE（カスタム可）
+- 初期48色。スロット選択→スポイト(Alt+クリック)で上書きカスタム。
+- ＋/−でスロット追加/削除（最低1色）。⇩/⇧でJSON書き出し/読込。
+- localStorage `animator_palette_v1` に保存（ブラウザ全体共通）。
+
+### REF パネル（`topbar REF` ボタン）
+- **パネル開閉＝キャンバス上の全参照表示マスター ON/OFF**（閉じると全参照非表示＋EDIT OFF）
+- **パネル最上部の共通行**：MOVE ボタン / 中央ボタン / 選択状況表示
+  - MOVE モード中：画像はキャンバスでクリック→最前面化＋ドラッグ移動、ホイールで拡縮
+  - ANIMATOR/FRAMEはリスト/見出しクリックで選択してからMOVEでドラッグ
+  - 中央ボタン：選択中参照を原寸(1:1)中央に戻す
+
+- **FRAME LAYER**（描ける下絵）：
+  - EDIT ON で描画対象が frame-layer に切り替わる
+  - 見出しクリックで MOVE 選択 → ドラッグ移動・ホイール拡縮（描いた内容ごと移動）
+  - CSS transform で移動（描画バッファは保持。描画時は `toFrameLocal()` で逆変換）
+
+- **REF IMAGE**（複数）：
+  - LOAD で複数選択読込・原寸中央・カスケード配置。× IMG で選択/最後の1枚を削除。不透明度スライダー。
+  - meta に `refImages[]`（src/x/y/scale/opacity）で保存・復元
+
+- **REF ANIMATORS**（JSON連番）：
+  - `+ JSON FILE` で追加（複数選択可）
+  - `+ FROM SAVED`：同ブラウザ内で → COMPOSER 等経由で送信した `tdr_exchange` DB の一覧から追加（→「FROM SAVED について」参照）
+  - リスト項目クリックで選択（重なりでも選べる）→ MOVE でドラッグ移動・ホイール拡縮
+  - VIS で表示ON/OFF。× で削除。→ANM ボタンは削除済み（誤タップ防止。別ANIMATORはIMPORT JSONで開く）
+  - 手元より長いJSONは再生・スクラブでREF全尺まで追従（`effectiveTotalTicks()`でタイムライン延長）
+  - transform（x/y/scale）を refs DB に保存・復元
+
+### 設定パネル（⚙ ボタン / `,` キー / 左上ラベルクリック）
+- **CANVAS SIZE**：W×H 入力 + プリセット。変更時は確認ダイアログ→中央フィット。
+- **CANVAS GUIDES**：解像度枠 ON/OFF+px 入力 / セーフフレーム ON/OFF+% 入力（guide-layer に描画のみ）
+- **KEYBOARD SHORTCUTS**：全アクションをキー再割当（localStorage `animator_keymap_v1`）。RESET DEFAULTS。
+- 下端ドラッグ＋段スナップで高さ調整（ビューポート超過しない）
+- REFパネル・パレット（フローティング時）も同様のリサイズグリップ
 
 ### タイムライン
-- `kind: 'draw' | 'empty'` の2種セルで構成
-- duration（コマ打ち数）:
-  - 1〜3コマ: 固定幅 + 内側仕切り線
-  - 4コマ以上: セル横伸縮 + 下部目盛り
-  - セル右端スクラブで 1〜120コマまで自由変更（最大15秒制限）
-- 末尾エリアタッチ: 「前フレームを伸ばす + 1コマの新フレーム追加」
-- セル並び替え: ペン/マウスでドラッグ
-- **指でタイムラインを横スワイプ = ネイティブスクロール**
-- Alt+ホイール / ipadはtime-track上ペンスクラブでセル基準幅伸縮
-- **フレーム非表示トグル** (`f.hidden`): セルホバーで●/✕ボタン表示。非表示セルは暗いオーバーレイ。再生・オニオンスキンでスキップ
-- **SPLIT**: 現フレームをコマ数半分に分割。同じ絵を両方にコピー
-- 複数選択
-- フレームセルをShift+クリック or タップで追加選択
-- 選択中セルはハイライト表示
-- コピー/ペースト
-- コピー: 選択フレームをクリップボード
-- ペースト: currentFrameの直後に挿入
-- 複数選択での丸ごと移動
-- 元位置には empty ブロックが残る（長さ維持）
-- 選択中のフレームをまとめて削除
+- `kind: 'draw' | 'empty'` の2種セル。duration 1〜120。末尾タップで追加。
+- セル並び替えドラッグ / 複数選択(Shift) / コピペ / 移動 / 削除
+- Alt+ホイール / iPad ペンスクラブでセル基準幅伸縮
 
-### ストリップツールバー（再生エリア）
-- PLAY / STOP / FPS入力
-- **IN**: 現フレームの開始コマ（スクラブ → 前フレームのdurationが変わる）
-- **OUT**: 現フレームの終了コマ（スクラブ → 現フレームのdurationが変わる）
-- **TIME**: 全コマ数（タップでコマ↔秒トグル）
-- ONION / SPLIT / + FRAME / DUPLICATE / DELETE
+### ワークエリア（時間ルーラー上の黄色帯）
+- 左右ハンドルドラッグで範囲指定（実タイムライン内に収まる）
+- **Wキー**：選択フレームがあればその範囲にFIT、なければ全範囲
+- **帯スライド（移動）**：中ボタンドラッグ（マウス）またはタッチ。左クリック/ペンはタイムライン操作に委ねる
+- REFが手元より長いとき全範囲再生でREF末尾まで延長（ただし帯/ハンドルは実タイムライン内）
+- time-track の空き領域ダブルクリック → 全範囲
 
-### ワークエリア（時間メモリ上部）
-- ネオンイエローの帯で再生・書き出し範囲を表示
-- 左右ハンドルドラッグで範囲指定
-- 中央ボディドラッグで範囲移動
-- work-area-body ダブルタップで「全範囲 → 現在フレームのみ → 元の状態」サイクル
-- **time-track空きエリアのダブルクリック/タップ → 全範囲**
-- 再生はワークエリア内のみをループ
+### LIVE 連携（BroadcastChannel `tdr_live`）
+- ANIMATORの autosave 完了 → COMPOSERへ `project-update` をブロードキャスト
+- COMPOSERが受信 → `projectId` 一致トラックの絵だけ差し替え（KF/transform/マーカー保持）
+- `→ COMPOSER` ボタン：別ウィンドウで COMPOSER を起動し LIVE も有効化。再クリックで前面化。
+- topbar の `LIVE ○/●` で接続状態を表示。手動クリックで強制再送可。
+- 同一ブラウザ・同一オリジンのタブ間のみ。
 
-### 時間ルーラー（time-track）
-- **12コマ = 1k** 単位でkラベル（12f=1k, 24f=2k …）
-- `cellStretchPerTick ≥ 12px` → 1コマ単位の小目盛り、`≥ 5px` → 3コマ、それ以外 → 6コマ
-- 秒モード時: 小数1桁の秒ラベル
-- 再生中カーソルは毎RAF（1コマ単位）でリアルタイム移動
+### 書き出し
+- **EXPORT**：作業解像度そのまま PNG（BG白固定 or Shift で透過）
+- **SEQ PNG**：全コマを作業解像度 BG透過の連番 PNG で ZIP 一括書き出し（JSZip CDN）
+- **EXPORT JSON**：COMPOSER連携用プロジェクトJSON（cells に PNG data URL を埋め込み）
+- **IMPORT JSON**：別プロジェクトを読み込んで現在のプロジェクトを置換
 
-### UNDO / REDO（2系統）
-- **キャンバス系統** (`state.lastEditWas === 'canvas'`): 現フレームの描画履歴 (50ステップ)
-- **タイムライン系統** (`state.lastEditWas === 'timeline'`): フレーム構成スナップショット (20ステップ)
-  - `tlHistory[]` + `tlHistIdx` でスナップ管理
-  - `pushTimelineHistory()` は addFrame / deleteCurrentFrame / splitCurrentFrame / スクラブ終了（変更時のみ）で自動呼出
-  - スナップは drawData 参照 + history の shallowコピー で保存（メモリ効率と正確性を両立）
-- **切替ロジック**: Ctrl+Z / 指2本タップ → `lastEditWas` に基づいて対象を自動判定。キャンバス履歴がない場合はタイムライン系にフォールバック
+### Undo / Redo
+- グローバルログ `gUndo[] / gRedo[]`（canvas / timeline / framelayer の3系統を時系列統合）
+- キャンバスUndoは各コマ独立（50ステップ）。コマをまたぐ統合Undoはしない（仕様）
+- タイムライン履歴 `tlHistory[]`（20ステップ・idベースマージで絵を温存）
 
-### 操作系
-- **Apple Pencil**: 常に描画
-- **指1本**: ペンツール時=パン、消しゴム/塗りつぶし時=描画
-- **指2本**: ピンチズーム + パン
-- **指2本タップ**: Undo
-- **指3本タップ**: Redo
-- **キーボード**:
-  - B=ペン、E=消し、G=塗り、1/2/3=サイズ、O=オニオン
-  - N=新規、D=複製、**S=SPLIT**、Del/Backspace=削除
-  - Space=再生、←→=コマ移動
-  - **W=ワークエリア全範囲リセット**
-  - Ctrl+Z/Y=Undo/Redo
-
-### 保存・書き出し
-- IndexedDB自動保存（800ms遅延、差分保存）
-- 4K PNG書き出し（現在のフレームのみ、BG白固定）
+### ショートカット（デフォルト・⚙で変更可）
+| キー | アクション |
+|---|---|
+| B / E / G | ペン / 消し / 塗り |
+| 1 / 2 / 3 | サイズ 1px / 2px / 20px |
+| O | オニオンスキン |
+| N / D | 新規 / 複製フレーム |
+| S | SPLIT（スクラブ位置で分割） |
+| W | ワークエリア=選択FRAME範囲 / 全範囲 |
+| Space | 再生 / 停止 |
+| ← / → | コマ移動 |
+| Del / BS | フレーム削除 |
+| F | FIT |
+| M | MIRROR |
+| X | FLIP |
+| R | REFパネル開閉 |
+| , | 設定パネル開閉 |
+| Tab | ツールバー左右入替 |
+| Alt+クリック | スポイト（選択スロット上書き） |
+| Ctrl+Z / Y | Undo / Redo |
+| 指2本タップ / 指3本タップ | Undo / Redo |
 
 ---
 
@@ -178,190 +177,69 @@ _新チャット冒頭にこのファイルを貼り付けてください_
 
 ```js
 const state = {
-  tool, penSize, eraseSize, inkColor, fillColor, bgBright,
-  zoom, fitMode, panX, panY,
-  frames,           // [{id, kind, duration, hidden, drawData, thumbCanvas, history, histIdx, ...}]
-  currentFrame, fps,
-  playing, loop,
-  onionOn,
-  smoothing,
-  cellBaseW,              // セル基準幅 (px)
-  cellStretchPerTick,     // duration 4以上の1コマあたり幅 (px)
-  workStart, workEnd,     // ワークエリア (コマ単位、exclusive)
-  flipped, mirrorOn, mirrorAxisX,
-  timeUnit,               // 'frames' | 'seconds'
-  lastEditWas,            // 'canvas' | 'timeline' ← UNDO系統切替に使用
+  tool, penSize, eraseSize, inkColor, fillColor,
+  pressurePen, fillErase,
+  bgBright, zoom, fitMode, panX, panY,
+  frames,              // [{id, kind, duration, hidden, drawData, thumbCanvas, history, histIdx, ...}]
+  currentFrame, fps, playing, loop, onionOn, smoothing,
+  cellBaseW, cellStretchPerTick,
+  workStart, workEnd,  // ワークエリア (tick単位, exclusive)
+  flipped, mirrorOn, mirrorAxis, mirrorAxisX, mirrorAxisY,
+  timeUnit,            // 'frames' | 'seconds'
+  toolbarSwapped, paletteFloat, paletteFloatPos,
+  selectedFrameIds,    // Set<frameId>
+  frameLayer: { visible, opacity, editMode, x, y, scale },
+  refAnimators: [{ id, name, projectId, visible, opacity, color, ticks, totalTicks, fps, source, x, y, scale }],
+  refImages:    [{ id, img, src, x, y, scale, opacity, visible }],
+  refMoveMode, refSel, // refSel: {type:'img'|'anim'|'frame', id?}
+  refMasterShow,       // REFパネル連動マスター表示
+  guides: { resOn, resW, resH, safeOn, safeA, safeB },
+  projectId,           // BroadcastChannel連携用ID
+  composerData,        // COMPOSERのKF等を保持してEXPORT時に乗せる
 };
-// タイムライン履歴（stateの外）
-const tlHistory = [];
-let tlHistIdx = -1;
-```
-
-### フレームオブジェクト
-```js
-{
-  id,           // ユニークID
-  kind,         // 'draw' | 'empty'
-  duration,     // コマ打ち数 (1〜120)
-  hidden,       // 非表示フラグ (draw のみ)
-  drawData,     // Uint8ClampedArray (draw のみ)
-  thumbCanvas,  // サムネ canvas要素 (draw のみ)
-  history,      // スナップ配列 (draw のみ)
-  histIdx,      // 現在位置 (draw のみ)
-  strokeCount,
-  dirty,
-}
+// グローバルUndo
+const gUndo = [], gRedo = [];
+// タイムライン履歴
+const tlHistory = []; let tlHistIdx = -1;
+// パレット（localStorage）
+let gPalette = [...]; let gPalSlot = N;
+// キーマップ（localStorage）
+let gKeymap = {};
 ```
 
 ---
 
 ## アーキテクチャ上の注意点
 
-- **タッチ**: 全タッチ処理は `#stage` の `pointerdown/move/up` で一元管理（`touchPtrs: Map`）。drawCanvas は pen/mouse のみ。
-- **ミラーガイド**: `#mirror-guide` は canvas-wrap の兄弟要素（transform の影響を受けない）。位置は `updateMirrorGuide()` がJS座標で計算。
-- **FLIP + 座標**: `toCanvasCoord()` 内で flipped 時に x を反転。ミラーも考慮済み。
-- **削除=空ブロック変換**: deleteCurrentFrame は drawフレーム→empty 変換（タイムライン尺維持）。emptyの削除は完全splice。
-- **timeline-cursor**: `#time-track-inner` 内の絶対配置 div。再生中は `tickToPx(tick)` で毎RAFで left を直接更新（updateTimeTrack呼び出しなし）。
-- **IndexedDB**: v1→v2 移行コードあり（frameOrderの形式変換）。
+- **タッチ**：全タッチは `#stage` の pointerdown/move/up で一元管理（`touchPtrs: Map`）。drawCanvas は pen/mouse のみ。
+- **FRAMEレイヤー移動**：`applyFrameLayerTransform()` で CSS transform。描画時は `toFrameLocal(x,y)` で逆変換してバッファ座標へ。
+- **REF IMAGE 最前面化**：`bringImageFront(id)` が `state.refImages` 末尾へ splice → `renderRefImg` が後に描画。
+- **CANVAS SIZE 変更**：`setCanvasSize()` → `setupCanvas()` → 全フレームの `drawData` を `resampleDrawData()` で中央フィット（nearest）再サンプル。Undo履歴はリセット。
+- **ショートカット**：`SHORTCUT_ACTIONS` 配列にアクション登録 → `gKeymap`(localStorage) で照合。`handleShortcutCapture()` がキャプチャモード中は全 keydown を横取り。
+- **LIVE 連携**：`flushSave` 完了後 `broadcastProjectDebounced()` が `gLiveActive` なら送信。`gComposerWin` で別窓への参照を保持（再クリックで前面化）。
+- **削除＝空ブロック変換**：drawフレーム→empty（タイムライン尺維持）。emptyの削除は完全splice。
+- **effectiveTotalTicks()**：手元 totalTicks と表示中REFの最長の大きい方。再生・スクラブ・ルーラーがREF尺まで延長する根拠。
 
 ---
 
-## 既知の問題・注意点
+## FROM SAVED について
+`+ FROM SAVED` は、**同じブラウザ内で → COMPOSER 等を経由して送信した共有DB（`tdr_exchange`）に残っているプロジェクト一覧**から参照を追加する機能。
+- 最初は空で分かりにくい（同ブラウザ内でプロジェクトを → COMPOSER 送信して初めて候補に出る）
+- 将来的には **index ページにANIMATOR一覧** を出して、そこから開く/REF参照に追加できる動線が理想（別フェーズ）
 
-- Apple Pencilの描き始めに若干の反応遅延あり（許容範囲とのこと、将来改善候補）
-- `tlHistory` のスナップは drawData を参照渡しで保持するため、restoreTL 後は古い参照が frame.drawData に入る場合がある（syncFrameFromCanvas で随時更新されるため実用上は問題なし）
-- タイムラインUNDO後 IndexedDB に即時反映（scheduleSave）されるが、大量undo時はDBと一時的に乖離する可能性あり
+---
+
+## 既知の制限・注意点
+- ライブ連携は同一ブラウザ・同一オリジンのタブ間のみ（異なるPCは対象外）
+- キャンバス拡大はメモリ×コマ数で増加（8Kは多コマ不可。上限は4K面積）
+- FRAMEレイヤーを移動した状態でのフラッドフィルは `toFrameLocal()` 経由（移動+スケールが大きいと描画位置が微妙にズレる可能性あり）
+- タイムラインUNDO後 IndexedDB に即時反映されるが、大量undo時はDBと一時的に乖離する可能性あり
+- Apple Pencilの描き始めに若干の反応遅延あり（許容範囲とのこと・将来改善候補）
 
 ---
 
 ## 開発スタイル
-- 短いプロンプト＋即実行スタイル（「go!」「見せてー」）
-- 単一HTMLファイルで完結させる原則
-- テストは `node -e "new Function(scriptContent)"` で構文確認後、実機で最終確認
-- 変更は Edit（str_replace）で差分のみ修正（全書き換え最小限）
-- GitHub push は明示的に依頼された時のみ
-
----
-
-## UI調整（実装済みメモ）
-- ツールバー左右入替は grid-template-areas で実装（#app.swapped で areas/列幅を反転、
-  stageは常に中央。崩れ防止）。⇄ボタンはツール列最上部（.tb-swap）。ショートカット Tab
-- topbar の FRAME群（編集/表示/不透明度/CLR/IMG）は REFパネルへ集約。
-  REFパネル構成: ①FRAME LAYER（EDIT/✕/CLR/IMG＋OPACITY）②REF ANIMATORS（参照リスト）
-  topbarは REF ボタン1個に集約。REFパネル開閉ショートカット R
-- ショートカット変更: F=FIT / M=MIRROR / X=FLIP / R=REFパネル / Tab=ツールバー左右入替
-  （旧 F=FRAME編集 は廃止。FRAME編集はREFパネルのEDITボタン）
-- SPLITボタンは廃止。Sキーのみ（カーソル下=state.scrubTickで分割）
-- timeline-cursor に透明ヒットエリア（::after 幅18px）追加でつかみやすく
-- ホイール拡縮は zoomAt() をステージ中心基準の逆写像に修正（カーソル下が動かない）
-- FILL PALETTEフローティング時、palette pnl を body 直下に物理的に移動（#side が
-  display:none で畳まれて palette まで非表示になる問題を修正）。ドッキング時は #side に戻す
-- MIRRORのガイドラインをドラッグで移動可能に（mirrorAxisX/Y を更新）。
-  MIRROR ボタンをダブルクリックで 垂直軸 ⇄ 水平軸 を切替。mirrorAxis/mirrorAxisX/mirrorAxisY を
-  meta に永続化。描画は mirrorPt(x,y) を介して両軸対応
-- pushTimelineHistory に等価判定を追加し、同一スナップの重複登録を排除
-  （「Undoが何度か効かない」感の軽減）
-
-### Undo/Redo を一元ディスパッチャ方式に刷新（重要）
-- 従来は state.lastEditWas（2値）＋ frameLayer.editMode（現在モード）で
-  3系統（canvas/timeline/framelayer）を切替えていたため、編集系統をまたぐと
-  「効いたり効かなかったり」「一気に先頭へ戻る」不具合があった
-- 新方式: グローバルUndoログ gUndo[] / gRedo[] に編集を時系列で記録
-  （各エントリ {type:'canvas',frameId} | {type:'timeline'} | {type:'framelayer'}）。
-  undo()=最後のエントリをpopして該当系統を1ステップ戻す / redo()=その逆。
-  → 「直前に触った場所のUndoが効く」を保証。FRAMEレイヤー編集中でも、
-    直前がキャンバス描画ならキャンバスを戻す
-- 各系統の単発操作は stepCanvasUndo/Redo・stepTimelineUndo/Redo・
-  stepFrameLayerUndo/Redo に分離。実行不可エントリ（履歴上限で消えた等）は
-  popして次の有効エントリへスキップ（暴走防止）
-- canvasエントリは frameId で対象コマを特定し、別コマなら switchToFrame して表示
-- フック: pushHistory→gLog(canvas) / pushTimelineHistory→gLog(timeline,
-  ただし最初の基準スナップは除外) / pushFrameLayerHistory→gLog(framelayer)
-- FRAMEレイヤーは ensureFlBaseline() で「編集前の基準」を1枚積む
-  （startStroke/fill/CLR/IMG の各編集前に呼ぶ）。最初の1編集もUndo可能に
-- プロジェクト読込（applyProjectJSON）と起動完了時に resetGlobalHistory()。
-  tb-undo/redo は gUndo/gRedo の有無で disabled 表示
-- 補足: キャンバスUndoは従来どおり「コマ単位で独立」（各コマ50ステップ）。
-  これは仕様（斬新で良いとの評価）。コマをまたぐ統合Undoにはしていない
-
-### 「Undoで一気に先頭へ戻る」根本原因の修正
-- 原因: フレーム構造を変える一部操作が pushTimelineHistory() を呼んでおらず、
-  タイムライン履歴の基準スナップが「操作前の少ないフレーム数」のまま放置されていた。
-  後で別のタイムライン操作で初めて履歴が積まれ、そこでUndoすると基準（＝古い状態）へ
-  一気に戻っていた
-- 記録を追加した操作:
-  ・setupEmptyTail（空き末尾クリックでフレーム追加）← ユーザー指摘の主因
-  ・fc-dur クリック（コマ数 1/2/3 サイクル切替）
-  ・fc-vis-btn（フレーム表示/非表示トグル）
-  ・handleCellTap の空→描画フレーム昇格（promoteEmptyToFrame）
-- これでフレーム構造を変える全操作が個別の undo ステップになり、1手ずつ戻る
-- 既に記録済みだった操作: addFrame / duplicate / delete / split / 並び替え(move) /
-  paste / dur ハンドルscrub / IN/OUT scrub
-
-### restoreTL を「構造のみ復元・絵は生オブジェクト温存」に変更（重要）
-- 症状: 各コマに順に描いてUndoしていくと、キャンバスUndoがコマ作成の取消に
-  当たったタイミングで、他コマの絵まで一緒に巻き戻る（FRAMEが一気に戻る感じ）
-- 原因: タイムライン履歴は全フレームの“丸ごとスナップショット”で、restoreTL が
-  state.frames を snapshot で総入れ替えしていた。snapshot 内の drawData は撮影時点の
-  もの（=そのコマがまだ空だった頃）なので、コマ作成Undoで前コマの絵が消えた
-- 修正: restoreTL を id ベースのマージに変更。
-  ・snapshot と現在の両方に在るコマ（種別一致）→ 生オブジェクトを温存し、
-    duration/hidden など構造だけ snapshot に合わせる（絵・per-frame履歴は維持）
-  ・snapshot にしか無い（＝削除済み）／種別が違う（空⇄描画の取消）→ snapshotから復元
-  ・復元前に現在表示コマを syncFrameFromCanvas で確定
-- 効果: コマ作成のUndoは「そのコマを消す」だけになり、前コマの絵は保持。
-  「描く→次コマ作成→描く…」を逆順に1手ずつ正しく戻れる
-- 注意: 構造境界をまたぐ Redo は per-frame履歴の都合で塗りが戻りきらない場合あり
-  （多くのエディタ同様、分岐時のredoは部分的。実害は小）
-
-## 次回実装候補（優先度おまかせ）
-
-### 機能要望メモ
-
-**ANIMATOR↔COMPOSER直結ボタン** （将来的）
-- localStorageかIndexedDBで同一ブラウザタブ間の完全リアルタイム連携
-、ポスト通信（BroadcastChannel API）
-
-**キャンバス**
-- ~~主線/下書き/指示ボタンはERASE時は主線ONのみON~~ → 実装済み（applyInkUIForTool）
-- ~~筆圧ペン（ペンボタンWクリックで変更）~~ → 実装済み
-  （state.pressurePen / pressureRadius / drawDotRadius・drawLineRadius。PEN Wクリックで黄バッジ）
-- ~~透明で塗りつぶし消し（塗りつぶしボタンWクリックで変更）~~ → 実装済み
-  （state.fillErase。floodFillが(0,0,0,0)で領域クリア。FILL Wクリックで桃バッジ）
-- 無限キャンバス（書き出しは4Kのみ）。左上の2048×1152をタップで解像度枠の表示/変更。セーフフレーム80%/90%＋のりしろ1.2倍表示
-- 線のコピペ＆選択/移動/回転/スケール（ペイント中にCtrl押すと矩形選択、Alt押すと投げ縄にかわる）
-- ~~FILL PALETTEのフローティング化~~ → 実装済み
-  （pnlヘッダ ⤢ で切替。#app.palette-float でside列を0に畳む、position:fixed＋ヘッダドラッグ、
-   meta.paletteFloat/paletteFloatPos で永続化）
-- ~~スポイトでFILL PALETTEに色取り込み~~ → 実装済み
-  （PICKツール or Alt+クリック。sampleCompositeColor が draw→FRAME→REF→白 を上から探索。
-   取り込み色は #picked-swatch に表示、state.fillColorへ反映）
-- 参照画像パネル単体フローティング（ホイール拡縮+パン）はREFのIMG＋スポイトで概ね代替済み
-- ~~ツールバーの左右入れ替え~~ → 実装済み（topbar `⇄`。#app.swapped でgrid列入替、meta.toolbarSwappedで永続化）
-
-**タイムライン**
-- ~~SPLITツール: クリックした位置で分割~~ → 実装済み（state.scrubTick=スクラブ/クリック位置、
-  splitAtPlayhead()。SPLITボタン/Sキー共にクリック位置で分割、範囲外は中央フォールバック）
-- ~~トラック レイヤー機能~~ → **REF参照ANIMATORで解決済み**（ANIMATOR側はトラックを持たず、
-  複数ANIMATORをREFパネルでコマ同期参照。レイヤー分けは別ANIMATORを作りREFで重ねる運用）
-
-**書き出し**
-- ~~連番PNG BG透過 ZIP一括書き出し（COMPOSER/AE合成前提）~~ → 実装済み
-  （topbar `SEQ PNG`。exportSequencePNG()。1ティック=1枚で4K透過、保持コマは複製、JSZip CDN追加）
-
-**保存**
-- ローカルファイル保存/読み込み（IndexedDB補完用） ※EXPORT/IMPORT JSONで概ね充足
-
-**Settings UI**
-- フローティングSettingsウィンドウ
-- ショートカット変更
-- ツールバー左右取り外しレイアウト変更
-
-### 開発バックログ（工数大きめ）
-1. **複数選択** (Shift+クリック) + コピー/ペースト + 複数移動/削除
-2. **4K連番PNG書き出し（zip）** — JSZipでzip圧縮
-3. **FILL PALETTEのフローティング化**
-4. **参照画像パネル**（フローティング、スポイト付き）
-5. **タイムライン共通レイヤー**（全コマ共通の背景トレース用）
-6. **PWA化**（manifest.json + service worker）
-7. **GitHubエクスポート/インポート**（zip形式）
+- 単一HTMLで完結。外部依存は CDN（JSZip 等）のみ。
+- 変更は Edit（差分）で最小限に。全書き換えは避ける。
+- 構文チェック（`new Function`）→ Pages か `file://` で実機確認。
+- push は明示依頼時のみ。大きい・不可逆な変更は先に方針を確認。

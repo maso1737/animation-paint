@@ -302,6 +302,7 @@ html,body{
   background:rgba(255,255,255,0.015);
 }
 .ref-item.hidden-ref{opacity:0.45;}
+.ref-item.sel-ref{border-color:var(--acid);box-shadow:0 0 0 1px rgba(54,255,0,0.4) inset;}
 .ref-item-top{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
 .ref-dot{width:9px;height:9px;flex-shrink:0;border-radius:1px;}
 .ref-name{
@@ -464,9 +465,9 @@ html,body{
 #palette-resize{display:none;height:11px;cursor:ns-resize;align-items:center;justify-content:center;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);flex:0 0 auto;}
 #palette-resize::after{content:'';width:26px;height:2px;background:rgba(255,255,255,0.25);}
 #palette-pnl.floating #palette-resize{display:flex;}
-/* 設定パネル 下端リサイズグリップ */
-#settings-resize{height:11px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);}
-#settings-resize::after{content:'';width:28px;height:2px;background:rgba(255,255,255,0.25);}
+/* パネル 下端リサイズグリップ（設定/REF共通） */
+#settings-resize,#ref-resize{height:11px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);}
+#settings-resize::after,#ref-resize::after{content:'';width:28px;height:2px;background:rgba(255,255,255,0.25);}
 #app.palette-float{ grid-template-columns:72px 1fr 0; }
 #app.palette-float.swapped{
   grid-template-columns:0 1fr 72px;
@@ -1289,7 +1290,7 @@ input[type=range]::-moz-range-thumb{
       <div id="time-track-inner" style="width: 932px; left: 28px; transform: translateX(0px);">
         <div id="work-area" style="left: 635px; width: 294px;">
           <div class="work-handle" id="work-handle-l"></div>
-          <div id="work-area-body" title="ダブルタップで全範囲/最小範囲切替"></div>
+          <div id="work-area-body" title="中ボタンドラッグ（またはタッチ）で範囲を移動。左ハンドルで端を調整"></div>
           <div class="work-handle" id="work-handle-r"></div>
         </div>
         <div id="timeline-cursor" style="left: 333px;"></div>
@@ -1322,9 +1323,18 @@ input[type=range]::-moz-range-thumb{
     <span id="ref-panel-close" title="閉じる">✕</span>
   </div>
   <div id="ref-panel-body">
+    <!-- 共通: 移動モード/中央（選択中の参照=画像/アニメ/FRAMEに作用） -->
+    <div class="ref-sect">
+      <div class="ref-sect-h">MOVE / CENTER（選択中の参照を操作）</div>
+      <div class="ref-frame-row">
+        <button id="btn-ref-move" class="ref-btn" title="ドラッグで移動／ホイールで拡縮。画像はクリックで掴む、ANIMATOR/FRAMEは選択してから移動">MOVE</button>
+        <button id="btn-ref-center" class="ref-btn" title="選択中を原寸(1:1)＆中央に戻す">中央</button>
+        <span class="sc-hint" id="ref-sel-info" style="flex:1;align-self:center;text-align:right;">—</span>
+      </div>
+    </div>
     <!-- FRAMEレイヤー（全コマ共通の描けるトレース下絵） -->
     <div class="ref-sect">
-      <div class="ref-sect-h">FRAME LAYER（描ける下絵）</div>
+      <div class="ref-sect-h" id="frame-sect-h" style="cursor:pointer;" title="クリックでFRAMEレイヤーを選択（MOVE/中央の対象に）">FRAME LAYER（描ける下絵・移動可）</div>
       <div class="ref-frame-row">
         <button id="btn-frame-edit" class="ref-btn" title="このレイヤーに直接描画するモード（ON中は下絵に描ける）">EDIT</button>
         <button id="btn-frame-clear" class="ref-btn del" title="FRAMEレイヤーをクリア">CLR</button>
@@ -1337,19 +1347,18 @@ input[type=range]::-moz-range-thumb{
     </div>
     <!-- 参照画像（原寸・中央・ドラッグ移動/拡縮） -->
     <div class="ref-sect">
-      <div class="ref-sect-h">REF IMAGE（原寸・中央・移動）</div>
+      <div class="ref-sect-h">REF IMAGE（複数・原寸・移動）</div>
       <div class="ref-frame-row">
-        <button id="btn-refimg-load" class="ref-btn" title="参照画像を読み込み（原寸・中央）">LOAD</button>
-        <button id="btn-refimg-move" class="ref-btn" title="ドラッグで移動／ホイールで拡縮するモード">MOVE</button>
-        <button id="btn-refimg-fit" class="ref-btn" title="原寸(1:1)＆中央に戻す">中央</button>
-        <button id="btn-refimg-clear" class="ref-btn del" title="参照画像を消去">×</button>
+        <button id="btn-refimg-load" class="ref-btn" title="参照画像を読み込み（複数可・原寸・中央）">LOAD</button>
+        <button id="btn-refimg-clear" class="ref-btn del" title="選択中の参照画像を消去">× IMG</button>
       </div>
       <div class="ref-op-row" style="margin-top:6px;">
         <span class="ref-op-tag">表示</span>
-        <input type="range" id="refimg-opacity" min="0" max="100" value="60" title="参照画像の表示濃度（0=非表示）">
+        <input type="range" id="refimg-opacity" min="0" max="100" value="60" title="選択中の参照の表示濃度（0=非表示）">
         <span class="ref-op-val" id="refimg-opacity-val">60%</span>
       </div>
-      <input type="file" id="refimg-input" accept="image/*" style="display:none;">
+      <div class="sc-hint" id="refimg-sel" style="margin-top:4px;">—</div>
+      <input type="file" id="refimg-input" accept="image/*" multiple style="display:none;">
     </div>
     <!-- 参照ANIMATOR（複数ANIMATORをコマ同期で重ね表示） -->
     <div class="ref-sect">
@@ -1362,6 +1371,7 @@ input[type=range]::-moz-range-thumb{
     </div>
     <input type="file" id="ref-json-input" accept="application/json,.json" multiple style="display:none;">
   </div>
+  <div id="ref-resize" title="ドラッグで高さ調整（下のセクションを隠せます）"></div>
 </div>
 
 <!-- SETTINGS PANEL -->
@@ -1548,11 +1558,11 @@ const state = {
     resOn: false, resW: 1920, resH: 1080,   // 解像度枠（出力クロップの目安）
     safeOn: false, safeA: 90, safeB: 80,     // セーフフレーム（解像度枠に対する%）
   },
-  // 参照画像（原寸・中央・移動可。書き出し非合成）
-  refImg: {
-    img: null, src: null, x: 0, y: 0, scale: 1,
-    opacity: 0.6, visible: true, moveMode: false,
-  },
+  // 参照画像（複数・原寸・中央・移動可。書き出し非合成）
+  refImages: [],            // [{id, img, src, x, y, scale, opacity, visible}]
+  refMoveMode: false,       // ON中はドラッグで参照(画像/アニメ)を移動・ホイールで拡縮
+  refSel: null,             // 選択中の可動参照 {type:'img'|'anim', id}
+  refMasterShow: true,      // REFパネル連動: キャンバス上の参照表示マスター
   // ズームとパン
   zoom: 1,
   fitMode: true,
@@ -1603,6 +1613,7 @@ const state = {
     visible: true,
     opacity: 0.4,    // 0..1
     editMode: false, // true = 描画ターゲットがframeLayerになる
+    x: 0, y: 0, scale: 1, // 表示transform（EDIT画も移動/拡縮可能。既定は等倍0,0）
   },
   // 参照ANIMATOR（複数のANIMATORをコマ同期で重ね表示。書き出し/COMPOSERには行かない）
   // [{id,name,projectId,visible,opacity,color, ticks:[Image|null], totalTicks, fps,
@@ -1621,8 +1632,8 @@ const state = {
 function applyFrameLayerStyle(){
   const fl = state.frameLayer;
   // 可視性は「不透明度>0」で判定（専用の表示ON/OFFボタンは廃止）。
-  // 編集モード中は強制的に見えるよう下限0.6を確保。
-  const shown = fl.editMode || fl.opacity > 0;
+  // 編集モード中は強制的に見えるよう下限0.6を確保。REFマスターOFFで一括非表示。
+  const shown = state.refMasterShow && (fl.editMode || fl.opacity > 0);
   frameLayerCanvas.style.display = shown ? 'block' : 'none';
   frameLayerCanvas.style.opacity = fl.editMode ? Math.max(0.6, fl.opacity) : fl.opacity;
   // 内部フラグも整合（保存/スポイト合成判定で参照される）
@@ -1779,7 +1790,9 @@ async function addRefAnimator(json, fallbackName){
     ticks, totalTicks,
     fps: src.fps,
     source: src,
+    x: 0, y: 0, scale: 1,
   });
+  centerRefAnimator(state.refAnimators[state.refAnimators.length - 1]); // 原寸・中央に初期配置
   buildRefList();
   updateTimeTrack();
   renderRefLayer();
@@ -1842,6 +1855,8 @@ async function openRefInAnimator(id){
 function renderRefLayer(tickOverride){
   if(!refLayerCtx) return;
   refLayerCtx.clearRect(0, 0, CFG.WORK_W, CFG.WORK_H);
+  refLayerCanvas.style.display = state.refMasterShow ? 'block' : 'none';
+  if(!state.refMasterShow) return;
   const refs = state.refAnimators;
   if(!refs.length) return;
   const t = (typeof tickOverride === 'number') ? tickOverride : currentSyncTick();
@@ -1850,8 +1865,14 @@ function renderRefLayer(tickOverride){
     if(t < 0 || t >= r.ticks.length) continue;   // 参照側が尽きたら非表示
     const img = r.ticks[t];
     if(!img) continue;
+    // 各参照に transform(x,y,scale) を適用（原寸基準・移動可）
+    const sc = (typeof r.scale === 'number') ? r.scale : 1;
+    const ox = (typeof r.x === 'number') ? r.x : 0;
+    const oy = (typeof r.y === 'number') ? r.y : 0;
+    const w = img.naturalWidth * sc, h = img.naturalHeight * sc;
     refLayerCtx.globalAlpha = r.opacity;
-    try{ refLayerCtx.drawImage(img, 0, 0, CFG.WORK_W, CFG.WORK_H); }catch(e){}
+    try{ refLayerCtx.drawImage(img, ox, oy, w, h); }catch(e){}
+    if(isSelected('anim', r.id)) strokeRefSel(refLayerCtx, ox, oy, w, h);
   }
   refLayerCtx.globalAlpha = 1;
 }
@@ -1870,10 +1891,16 @@ function buildRefList(){
   }
   state.refAnimators.forEach(r => {
     const item = document.createElement('div');
-    item.className = 'ref-item' + (r.visible ? '' : ' hidden-ref');
+    item.className = 'ref-item' + (r.visible ? '' : ' hidden-ref') + (isSelected('anim', r.id) ? ' sel-ref' : '');
 
     const top = document.createElement('div');
     top.className = 'ref-item-top';
+    top.style.cursor = 'pointer';
+    top.title = 'クリックで選択（MOVE移動・中央・濃度の対象に）';
+    top.addEventListener('click', () => {
+      state.refSel = { type:'anim', id:r.id };
+      renderRefLayer(); renderRefImg(); buildRefList(); applyRefImgUI();
+    });
     const dot = document.createElement('span');
     dot.className = 'ref-dot';
     dot.style.background = r.color;
@@ -1893,17 +1920,12 @@ function buildRefList(){
     visBtn.className = 'ref-btn' + (r.visible ? ' on' : '');
     visBtn.textContent = r.visible ? '● VIS' : '✕ VIS';
     visBtn.addEventListener('click', () => toggleRefVis(r.id));
-    const anmBtn = document.createElement('button');
-    anmBtn.className = 'ref-btn anm';
-    anmBtn.textContent = '→ ANM';
-    anmBtn.title = 'このANIMATORを開く（連携更新）';
-    anmBtn.addEventListener('click', () => openRefInAnimator(r.id));
     const delBtn = document.createElement('button');
     delBtn.className = 'ref-btn del';
     delBtn.textContent = '✕';
     delBtn.title = '参照を削除';
     delBtn.addEventListener('click', () => removeRefAnimator(r.id));
-    btns.appendChild(visBtn); btns.appendChild(anmBtn);
+    btns.appendChild(visBtn);
     btns.appendChild(document.createElement('span')).style.flex = '1';
     btns.appendChild(delBtn);
 
@@ -1934,7 +1956,11 @@ function toggleRefPanel(force){
   const show = (typeof force === 'boolean') ? force : !p.classList.contains('show');
   p.classList.toggle('show', show);
   document.getElementById('btn-ref-panel').classList.toggle('on', show);
+  // REFパネルの開閉とキャンバス上の参照表示を連動（閉じる=一括非表示, EDITもOFF）
+  state.refMasterShow = show;
+  applyRefMaster();
   if(show) buildRefList();
+  markMetaDirty();
 }
 
 // 共有DB全件取得（FROM SAVED 用）
@@ -1962,6 +1988,7 @@ function saveRefs(){
           id:r.id, name:r.name, projectId:r.projectId,
           visible:r.visible, opacity:r.opacity, color:r.color,
           fps:r.fps, source:r.source,
+          x:r.x, y:r.y, scale:r.scale,
         })),
         savedAt: Date.now(),
       }, 'refs');
@@ -1990,7 +2017,12 @@ async function loadRefs(){
         ticks, totalTicks,
         fps: it.fps || (it.source.fps || 24),
         source: it.source,
+        x: (typeof it.x === 'number') ? it.x : 0,
+        y: (typeof it.y === 'number') ? it.y : 0,
+        scale: (typeof it.scale === 'number') ? it.scale : 1,
       });
+      const justAdded = state.refAnimators[state.refAnimators.length - 1];
+      if(typeof it.x !== 'number') centerRefAnimator(justAdded); // 旧データは原寸・中央
     }
     buildRefList();
     updateTimeTrack();
@@ -2296,87 +2328,206 @@ function applyZoom(){
   updateMirrorGuide();
   renderGuides();
   renderRefImg();
+  applyFrameLayerTransform();
+}
+// FRAMEレイヤーの表示transform（移動/拡縮）。描画ピクセルは保持しCSSで表示位置だけ動かす
+function applyFrameLayerTransform(){
+  const fl = state.frameLayer;
+  const z = state.zoom || 1;
+  if(fl.x || fl.y || fl.scale !== 1){
+    frameLayerCanvas.style.transformOrigin = '0 0';
+    frameLayerCanvas.style.transform = `translate(${fl.x*z}px, ${fl.y*z}px) scale(${fl.scale})`;
+  } else {
+    frameLayerCanvas.style.transform = '';
+  }
+}
+// 作業座標 → FRAMEレイヤーのバッファ座標（transformの逆。等倍0,0なら恒等）
+function toFrameLocal(x, y){
+  const fl = state.frameLayer;
+  if(!fl.x && !fl.y && fl.scale === 1) return { x, y };
+  return { x: Math.round((x - fl.x) / (fl.scale || 1)), y: Math.round((y - fl.y) / (fl.scale || 1)) };
 }
 
-// 参照画像（原寸・中央・移動可）を描画。書き出しには含めない
+// ── 可動参照（REF IMAGE複数 ＋ REF ANIMATOR）共通ユーティリティ ──
+let _refId = 0;
+function newRefImgId(){ return 'ri_' + (++_refId) + '_' + Date.now().toString(36); }
+// あるアニメ参照の現在ティック画像
+function animTickImg(r){
+  const t = currentSyncTick();
+  if(!r.ticks || t < 0 || t >= r.ticks.length) return null;
+  return r.ticks[t] || null;
+}
+function firstTickImg(r){ if(!r.ticks) return null; for(const im of r.ticks){ if(im) return im; } return null; }
+// アニメ参照を 原寸(1:1)＆中央 に配置
+function centerRefAnimator(r){
+  const im = firstTickImg(r); if(!im) return;
+  r.scale = 1;
+  r.x = Math.round((CFG.WORK_W - im.naturalWidth) / 2);
+  r.y = Math.round((CFG.WORK_H - im.naturalHeight) / 2);
+}
+// 可動参照の表示サイズ（natural*scale）。画像が無ければnull
+function refObjSize(type, obj){
+  const img = (type === 'img') ? obj.img : animTickImg(obj);
+  if(!img) return null;
+  return { img, w: img.naturalWidth * obj.scale, h: img.naturalHeight * obj.scale };
+}
+// 上(画像)→下(アニメ)の順で可動参照を列挙（ヒットテスト用：手前から）
+function refObjList(){
+  const arr = [];
+  for(let i = state.refImages.length - 1; i >= 0; i--){ const o = state.refImages[i]; if(o.img && o.visible) arr.push({type:'img', obj:o}); }
+  for(let i = state.refAnimators.length - 1; i >= 0; i--){ const r = state.refAnimators[i]; if(r.visible) arr.push({type:'anim', obj:r}); }
+  return arr;
+}
+// キャンバスのドラッグで掴めるのは「画像のみ」（アニメ/フレームはリスト等で選択してから移動）
+function hitTestImage(wx, wy){
+  for(let i = state.refImages.length - 1; i >= 0; i--){
+    const o = state.refImages[i];
+    if(!o.img || !o.visible) continue;
+    const w = o.img.naturalWidth * o.scale, h = o.img.naturalHeight * o.scale;
+    if(wx >= o.x && wy >= o.y && wx <= o.x + w && wy <= o.y + h) return o;
+  }
+  return null;
+}
+// 画像を最前面へ（配列末尾＝最後に描画）
+function bringImageFront(id){
+  const i = state.refImages.findIndex(o => o.id === id);
+  if(i >= 0 && i !== state.refImages.length - 1){ const [o] = state.refImages.splice(i, 1); state.refImages.push(o); }
+}
+function refFindSel(){
+  if(!state.refSel) return null;
+  if(state.refSel.type === 'img'){ const o = state.refImages.find(i => i.id === state.refSel.id); return o ? {type:'img', obj:o} : null; }
+  if(state.refSel.type === 'frame'){ return {type:'frame', obj: state.frameLayer}; }
+  const r = state.refAnimators.find(a => a.id === state.refSel.id); return r ? {type:'anim', obj:r} : null;
+}
+// 選択中(frame含む)の描画反映
+function renderSelObj(kind){
+  if(kind === 'frame') applyFrameLayerTransform();
+  else { renderRefImg(); renderRefLayer(); }
+}
+function isSelected(type, id){ return state.refSel && state.refSel.type === type && state.refSel.id === id; }
+// 選択ハイライト枠
+function strokeRefSel(ctx, x, y, w, h){
+  const lw = Math.max(1, 2 / Math.max(0.01, state.zoom));
+  ctx.save();
+  ctx.globalAlpha = 1; ctx.setLineDash([lw*4, lw*3]);
+  ctx.strokeStyle = 'rgba(54,255,0,0.95)'; ctx.lineWidth = lw;
+  ctx.strokeRect(x, y, w, h); ctx.restore();
+}
+
+// 参照画像（複数・原寸・移動可）を描画。書き出しには含めない
 function renderRefImg(){
   if(!refImgCtx) return;
   refImgCtx.clearRect(0, 0, CFG.WORK_W, CFG.WORK_H);
-  const r = state.refImg;
-  if(!r || !r.img || !r.visible || r.opacity <= 0) return;
+  refImgLayerCanvas.style.display = state.refMasterShow ? 'block' : 'none';
+  if(!state.refMasterShow) return;
   refImgCtx.imageSmoothingEnabled = true;
-  refImgCtx.globalAlpha = r.opacity;
-  const w = r.img.naturalWidth * r.scale, h = r.img.naturalHeight * r.scale;
-  try{ refImgCtx.drawImage(r.img, r.x, r.y, w, h); }catch(e){}
+  for(const o of state.refImages){
+    if(!o.img || !o.visible || o.opacity <= 0) continue;
+    const w = o.img.naturalWidth * o.scale, h = o.img.naturalHeight * o.scale;
+    refImgCtx.globalAlpha = o.opacity;
+    try{ refImgCtx.drawImage(o.img, o.x, o.y, w, h); }catch(e){}
+    if(isSelected('img', o.id)) strokeRefSel(refImgCtx, o.x, o.y, w, h);
+  }
   refImgCtx.globalAlpha = 1;
 }
-// 参照画像レイヤーの表示スタイル（不透明度0や非表示時はDOM非表示）
-function applyRefImgStyle(){
-  const r = state.refImg;
-  const shown = !!(r.img && r.visible && r.opacity > 0);
-  refImgLayerCanvas.style.display = shown ? 'block' : 'none';
-}
-// dataURL/objectURL から参照画像を読み込み（keepTransform=false で原寸・中央に配置）
-function loadRefImageFromSrc(src, keepTransform){
+// 旧API互換（表示スタイルは renderRefImg 内で処理）
+function applyRefImgStyle(){ renderRefImg(); }
+// dataURL から参照画像を1枚追加（原寸・中央、わずかにカスケード）
+function loadRefImageFromSrc(src, opts){
+  opts = opts || {};
   return new Promise(resolve => {
-    if(!src){ state.refImg.img = null; state.refImg.src = null; renderRefImg(); applyRefImgStyle(); resolve(); return; }
+    if(!src){ resolve(null); return; }
     const im = new Image();
     im.onload = () => {
-      state.refImg.img = im; state.refImg.src = src;
-      if(!keepTransform){
-        state.refImg.scale = 1;
-        state.refImg.x = Math.round((CFG.WORK_W - im.naturalWidth) / 2);
-        state.refImg.y = Math.round((CFG.WORK_H - im.naturalHeight) / 2);
-        state.refImg.visible = true;
-      }
-      renderRefImg(); applyRefImgStyle(); applyRefImgUI();
-      resolve();
+      const casc = state.refImages.length * 40;
+      const o = {
+        id: opts.id || newRefImgId(), img: im, src,
+        scale: (typeof opts.scale === 'number') ? opts.scale : 1,
+        x: (typeof opts.x === 'number') ? opts.x : Math.round((CFG.WORK_W - im.naturalWidth) / 2 + casc),
+        y: (typeof opts.y === 'number') ? opts.y : Math.round((CFG.WORK_H - im.naturalHeight) / 2 + casc),
+        opacity: (typeof opts.opacity === 'number') ? opts.opacity : 0.6,
+        visible: opts.visible !== false,
+      };
+      state.refImages.push(o);
+      if(!opts.noSelect){ state.refSel = {type:'img', id:o.id}; }
+      renderRefImg(); applyRefImgUI();
+      resolve(o);
     };
-    im.onerror = () => resolve();
+    im.onerror = () => resolve(null);
     im.src = src;
   });
 }
-// 原寸(1:1)＆中央に戻す
-function refImgCenter(){
-  const r = state.refImg;
-  if(!r.img) return;
-  r.scale = 1;
-  r.x = Math.round((CFG.WORK_W - r.img.naturalWidth) / 2);
-  r.y = Math.round((CFG.WORK_H - r.img.naturalHeight) / 2);
-  renderRefImg(); markMetaDirty(); scheduleSave();
+// 選択中の可動参照を 原寸(1:1)＆中央 に戻す（画像/アニメ/フレーム共通）
+function refCenterSel(){
+  const e = refFindSel(); if(!e) return;
+  e.obj.scale = 1;
+  if(e.type === 'frame'){
+    e.obj.x = 0; e.obj.y = 0; // フレームは等倍0,0が原寸中央
+  } else {
+    const s = refObjSize(e.type, e.obj); if(!s) return;
+    e.obj.x = Math.round((CFG.WORK_W - s.w) / 2);
+    e.obj.y = Math.round((CFG.WORK_H - s.h) / 2);
+  }
+  renderSelObj(e.type); markMetaDirty(); scheduleSave();
 }
-// カーソル基点でスケール
+// カーソル基点で拡縮（画像はカーソル下／無ければ選択中=アニメ/フレーム）
 function refImgScaleAt(clientX, clientY, factor){
-  const r = state.refImg; if(!r.img) return;
   const { x:wx, y:wy } = toCanvasCoord(clientX, clientY);
-  const ns = Math.max(0.05, Math.min(12, r.scale * factor));
-  const k = ns / r.scale;
-  r.x = wx - (wx - r.x) * k;
-  r.y = wy - (wy - r.y) * k;
-  r.scale = ns;
-  renderRefImg(); markMetaDirty(); scheduleSave();
+  const imgHit = hitTestImage(wx, wy);
+  const e = imgHit ? {type:'img', obj:imgHit} : refFindSel();
+  if(!e) return;
+  const o = e.obj;
+  const ns = Math.max(0.05, Math.min(12, o.scale * factor));
+  const k = ns / o.scale;
+  o.x = wx - (wx - o.x) * k;
+  o.y = wy - (wy - o.y) * k;
+  o.scale = ns;
+  renderSelObj(e.type); markMetaDirty(); scheduleSave();
 }
-// ドラッグ移動
-let refDragging = false, refDragStart = null;
+// ドラッグ移動：画像はカーソル下を掴んで最前面化／無ければ選択中(アニメ/フレーム)を移動
+let refDragging = false, refDragObj = null, refDragKind = null, refDragStart = null;
 function refDragBegin(clientX, clientY){
-  refDragging = true;
-  refDragStart = { cx:clientX, cy:clientY, x:state.refImg.x, y:state.refImg.y };
+  const { x:wx, y:wy } = toCanvasCoord(clientX, clientY);
+  const imgHit = hitTestImage(wx, wy);
+  let e;
+  if(imgHit){ bringImageFront(imgHit.id); state.refSel = {type:'img', id:imgHit.id}; e = {type:'img', obj:imgHit}; }
+  else { e = refFindSel(); }
+  if(!e){ refDragging = false; refDragObj = null; return false; }
+  refDragObj = e.obj; refDragKind = e.type; refDragging = true;
+  refDragStart = { cx:clientX, cy:clientY, x:e.obj.x, y:e.obj.y };
+  renderRefImg(); renderRefLayer(); applyRefImgUI(); buildRefList();
+  return true;
 }
 function refDragMove(clientX, clientY){
-  if(!refDragging) return;
+  if(!refDragging || !refDragObj) return;
   let dx = (clientX - refDragStart.cx) / (state.zoom || 1);
   const dy = (clientY - refDragStart.cy) / (state.zoom || 1);
   if(state.flipped) dx = -dx;
-  state.refImg.x = Math.round(refDragStart.x + dx);
-  state.refImg.y = Math.round(refDragStart.y + dy);
-  renderRefImg();
+  refDragObj.x = Math.round(refDragStart.x + dx);
+  refDragObj.y = Math.round(refDragStart.y + dy);
+  renderSelObj(refDragKind);
 }
 function refDragEnd(){
   if(!refDragging) return;
-  refDragging = false;
+  refDragging = false; refDragObj = null; refDragKind = null;
   markMetaDirty(); scheduleSave();
 }
-function refImgActive(){ return !!(state.refImg.moveMode && state.refImg.img); }
+// 移動モードが有効か（ONかつ参照表示中なら、ドラッグは移動操作として横取り）
+function refImgActive(){ return !!(state.refMoveMode && state.refMasterShow); }
+// REFパネル連動: キャンバス上の参照表示マスター
+function applyRefMaster(){
+  if(!state.refMasterShow){
+    if(state.frameLayer.editMode) state.frameLayer.editMode = false;
+    if(state.refMoveMode){
+      state.refMoveMode = false;
+      if(typeof drawCanvas !== 'undefined') drawCanvas.style.cursor = (state.tool==='fill')?'cell':'crosshair';
+    }
+  }
+  applyFrameLayerStyle();
+  renderRefImg();
+  renderRefLayer();
+  if(typeof applyRefImgUI === 'function') applyRefImgUI();
+}
 
 // 解像度枠 / セーフフレームのガイドを描画（表示のみ・書き出しには含めない）
 function renderGuides(){
@@ -2759,7 +2910,7 @@ function sampleCompositeColor(cx, cy){
   if(cx < 0 || cy < 0 || cx >= CFG.WORK_W || cy >= CFG.WORK_H) return null;
   const layers = [];
   layers.push(drawCtx);
-  if(state.refImg && state.refImg.img && state.refImg.visible && state.refImg.opacity > 0) layers.push(refImgCtx);
+  if(state.refMasterShow && state.refImages.some(o => o.img && o.visible && o.opacity > 0)) layers.push(refImgCtx);
   if(state.frameLayer && state.frameLayer.visible) layers.push(frameLayerCtx);
   if(state.refAnimators && state.refAnimators.length) layers.push(refLayerCtx);
   for(const c of layers){
@@ -3802,9 +3953,8 @@ function updateTimeTrack(){
   const workArea = document.getElementById('work-area');
   if(workArea){
     const sx = tickToPx(state.workStart);
-    // フルレンジ時はREF延長分まで帯を伸ばし、再生範囲を可視化
-    const endT = workAreaIsFull() ? effTotal : state.workEnd;
-    const ex = tickToPx(endT);
+    // 帯/ハンドルは実タイムライン内に収める（ハンドルが枠外へ出る不具合を防止）
+    const ex = tickToPx(Math.min(state.workEnd, totalTicks()));
     workArea.style.left = sx + 'px';
     workArea.style.width = Math.max(0, ex - sx) + 'px';
   }
@@ -4005,6 +4155,7 @@ function stop(){
 let drawing = false;
 let drawingPointerId = null;
 let lastX = 0, lastY = 0;
+let lastWX = 0, lastWY = 0; // 作業座標の直前点（FRAMEレイヤー移動時のミラー用）
 
 let strokeBuffer = [];
 const SMOOTH_WINDOW = 4;
@@ -4041,7 +4192,8 @@ stage.addEventListener('pointerdown', e => {
       eyedropAt(e.clientX, e.clientY);
     } else if(state.tool === 'fill'){
       if(state.frameLayer.editMode) ensureFlBaseline();
-      const {x, y} = toCanvasCoord(e.clientX, e.clientY);
+      let {x, y} = toCanvasCoord(e.clientX, e.clientY);
+      if(state.frameLayer.editMode){ const fc = toFrameLocal(x, y); x = fc.x; y = fc.y; }
       floodFill(x, y, state.fillColor);
       if(state.frameLayer.editMode) pushFrameLayerHistory();
       else pushHistory();
@@ -4152,54 +4304,61 @@ function startStroke(clientX, clientY, pressure){
   // FRAMEレイヤー編集中は最初の1ストロークもUndoできるよう編集前に基準を確保
   if(state.frameLayer.editMode) ensureFlBaseline();
   const {x, y} = toCanvasCoord(clientX, clientY);
-  lastX = x; lastY = y;
-  strokeBuffer = [{x, y}];
+  const em = state.frameLayer.editMode;
+  const dc = em ? toFrameLocal(x, y) : { x, y };   // FRAMEレイヤーが移動中なら逆変換
+  lastX = dc.x; lastY = dc.y;
+  lastWX = x; lastWY = y;                          // 作業座標（ミラー基準）
+  strokeBuffer = [{x: dc.x, y: dc.y}];
   drawing = true;
   const ctx = activeDrawCtx();
+  const mp = (mx, my) => { const m = mirrorPt(mx, my); return em ? toFrameLocal(m.x, m.y) : m; };
   const usePressure = state.pressurePen && state.tool === 'pen';
   if(state.tool === 'pen'){
     if(usePressure){
       lastR = pressureRadius(pressure);
-      drawDotRadius(ctx, x, y, lastR, INK[state.inkColor]);
-      if(state.mirrorOn){ const m = mirrorPt(x, y); drawDotRadius(ctx, m.x, m.y, lastR, INK[state.inkColor]); }
+      drawDotRadius(ctx, dc.x, dc.y, lastR, INK[state.inkColor]);
+      if(state.mirrorOn){ const m = mp(x, y); drawDotRadius(ctx, m.x, m.y, lastR, INK[state.inkColor]); }
     } else {
-      drawDot(ctx, x, y, currentToolSize(), INK[state.inkColor]);
-      if(state.mirrorOn){ const m = mirrorPt(x, y); drawDot(ctx, m.x, m.y, currentToolSize(), INK[state.inkColor]); }
+      drawDot(ctx, dc.x, dc.y, currentToolSize(), INK[state.inkColor]);
+      if(state.mirrorOn){ const m = mp(x, y); drawDot(ctx, m.x, m.y, currentToolSize(), INK[state.inkColor]); }
     }
   } else if(state.tool === 'erase'){
-    eraseDot(ctx, x, y, currentToolSize());
-    if(state.mirrorOn){ const m = mirrorPt(x, y); eraseDot(ctx, m.x, m.y, currentToolSize()); }
+    eraseDot(ctx, dc.x, dc.y, currentToolSize());
+    if(state.mirrorOn){ const m = mp(x, y); eraseDot(ctx, m.x, m.y, currentToolSize()); }
   }
 }
 function continueStroke(clientX, clientY, pressure){
   const raw = toCanvasCoord(clientX, clientY);
-  const {x, y} = smoothPoint(raw.x, raw.y);
+  const sm = smoothPoint(raw.x, raw.y);
+  const em = state.frameLayer.editMode;
+  const dc = em ? toFrameLocal(sm.x, sm.y) : { x: sm.x, y: sm.y };
+  const x = dc.x, y = dc.y;
   const ctx = activeDrawCtx();
   const usePressure = state.pressurePen && state.tool === 'pen';
+  // ミラーは「作業座標」で反転 → 必要ならフレームバッファ座標へ変換
+  const curWX = sm.x, curWY = sm.y;
+  const mLine = () => {
+    const a = mirrorPt(lastWX, lastWY), b = mirrorPt(curWX, curWY);
+    const a2 = em ? toFrameLocal(a.x, a.y) : a;
+    const b2 = em ? toFrameLocal(b.x, b.y) : b;
+    return [a2, b2];
+  };
   if(state.tool === 'pen'){
     if(usePressure){
       const r = pressureRadius(pressure);
       drawLineRadius(ctx, lastX, lastY, x, y, lastR, r, INK[state.inkColor]);
-      if(state.mirrorOn){
-        const m0 = mirrorPt(lastX, lastY), m1 = mirrorPt(x, y);
-        drawLineRadius(ctx, m0.x, m0.y, m1.x, m1.y, lastR, r, INK[state.inkColor]);
-      }
+      if(state.mirrorOn){ const [a,b] = mLine(); drawLineRadius(ctx, a.x, a.y, b.x, b.y, lastR, r, INK[state.inkColor]); }
       lastR = r;
     } else {
       drawLine(ctx, lastX, lastY, x, y, currentToolSize(), INK[state.inkColor]);
-      if(state.mirrorOn){
-        const m0 = mirrorPt(lastX, lastY), m1 = mirrorPt(x, y);
-        drawLine(ctx, m0.x, m0.y, m1.x, m1.y, currentToolSize(), INK[state.inkColor]);
-      }
+      if(state.mirrorOn){ const [a,b] = mLine(); drawLine(ctx, a.x, a.y, b.x, b.y, currentToolSize(), INK[state.inkColor]); }
     }
   } else if(state.tool === 'erase'){
     eraseLine(ctx, lastX, lastY, x, y, currentToolSize());
-    if(state.mirrorOn){
-      const m0 = mirrorPt(lastX, lastY), m1 = mirrorPt(x, y);
-      eraseLine(ctx, m0.x, m0.y, m1.x, m1.y, currentToolSize());
-    }
+    if(state.mirrorOn){ const [a,b] = mLine(); eraseLine(ctx, a.x, a.y, b.x, b.y, currentToolSize()); }
   }
-  lastX = x; lastY = y;
+  lastX = x; lastY = y;          // バッファ座標（次セグメント用）
+  lastWX = curWX; lastWY = curWY; // 作業座標（ミラー用）
 }
 function endStroke(){
   if(!drawing) return;
@@ -4229,7 +4388,8 @@ drawCanvas.addEventListener('pointerdown', e => {
     eyedropAt(e.clientX, e.clientY);
   } else if(state.tool === 'fill'){
     if(state.frameLayer.editMode) ensureFlBaseline();
-    const {x, y} = toCanvasCoord(e.clientX, e.clientY);
+    let {x, y} = toCanvasCoord(e.clientX, e.clientY);
+    if(state.frameLayer.editMode){ const fc = toFrameLocal(x, y); x = fc.x; y = fc.y; }
     floodFill(x, y, state.fillColor);
     if(state.frameLayer.editMode) pushFrameLayerHistory();
     else pushHistory();
@@ -4879,8 +5039,8 @@ async function applyProjectJSON(json){
   }
   applyFrameLayerStyle();
   // 参照画像は新規プロジェクト読込でクリア（前プロジェクトの残留防止）
-  state.refImg.img = null; state.refImg.src = null; state.refImg.moveMode = false;
-  if(typeof renderRefImg === 'function'){ renderRefImg(); applyRefImgStyle(); applyRefImgUI(); }
+  state.refImages = []; state.refMoveMode = false; state.refSel = null;
+  if(typeof renderRefImg === 'function'){ renderRefImg(); applyRefImgUI(); }
   renderRefLayer();
   updateResLabel();
   fitToStage();
@@ -5252,10 +5412,10 @@ async function flushSave(){
       paletteFloatPos: state.paletteFloatPos,
       workW: CFG.WORK_W, workH: CFG.WORK_H,
       guides: { ...state.guides },
-      refImg: state.refImg.src ? {
-        src: state.refImg.src, x: state.refImg.x, y: state.refImg.y,
-        scale: state.refImg.scale, opacity: state.refImg.opacity, visible: state.refImg.visible,
-      } : null,
+      refMasterShow: state.refMasterShow,
+      refImages: state.refImages.map(o => ({
+        src:o.src, x:o.x, y:o.y, scale:o.scale, opacity:o.opacity, visible:o.visible,
+      })),
       mirrorAxis: state.mirrorAxis,
       mirrorAxisX: state.mirrorAxisX,
       mirrorAxisY: state.mirrorAxisY,
@@ -5263,6 +5423,7 @@ async function flushSave(){
         visible: state.frameLayer.visible,
         opacity: state.frameLayer.opacity,
         editMode: state.frameLayer.editMode,
+        x: state.frameLayer.x, y: state.frameLayer.y, scale: state.frameLayer.scale,
         image: frameLayerToPNGDataURL(),
       },
       savedAt: Date.now(),
@@ -5379,13 +5540,18 @@ async function loadProject(){
     if(typeof meta.paletteFloat === 'boolean') state.paletteFloat = meta.paletteFloat;
     if(meta.paletteFloatPos && typeof meta.paletteFloatPos === 'object') state.paletteFloatPos = meta.paletteFloatPos;
     if(meta.guides && typeof meta.guides === 'object') state.guides = Object.assign(state.guides, meta.guides);
-    if(meta.refImg && typeof meta.refImg === 'object' && meta.refImg.src){
-      state.refImg.x = meta.refImg.x|0;
-      state.refImg.y = meta.refImg.y|0;
-      state.refImg.scale = (typeof meta.refImg.scale==='number') ? meta.refImg.scale : 1;
-      state.refImg.opacity = (typeof meta.refImg.opacity==='number') ? meta.refImg.opacity : 0.6;
-      state.refImg.visible = meta.refImg.visible !== false;
-      await loadRefImageFromSrc(meta.refImg.src, true); // 変形を保持して復元
+    if(typeof meta.refMasterShow === 'boolean') state.refMasterShow = meta.refMasterShow;
+    if(Array.isArray(meta.refImages)){
+      state.refImages = [];
+      for(const o of meta.refImages){
+        if(!o || !o.src) continue;
+        await loadRefImageFromSrc(o.src, {
+          x:o.x|0, y:o.y|0,
+          scale:(typeof o.scale==='number')?o.scale:1,
+          opacity:(typeof o.opacity==='number')?o.opacity:0.6,
+          visible:o.visible !== false, noSelect:true,
+        });
+      }
     }
     if(meta.mirrorAxis === 'h' || meta.mirrorAxis === 'v') state.mirrorAxis = meta.mirrorAxis;
     if(typeof meta.mirrorAxisX === 'number') state.mirrorAxisX = meta.mirrorAxisX;
@@ -5400,12 +5566,16 @@ async function loadProject(){
       const fl = meta.frameLayer;
       if(typeof fl.visible === 'boolean') state.frameLayer.visible = fl.visible;
       if(typeof fl.opacity === 'number') state.frameLayer.opacity = fl.opacity;
+      state.frameLayer.x = (typeof fl.x === 'number') ? fl.x : 0;
+      state.frameLayer.y = (typeof fl.y === 'number') ? fl.y : 0;
+      state.frameLayer.scale = (typeof fl.scale === 'number') ? fl.scale : 1;
       // 編集モードはアプリ起動時はOFFに戻す（不慮の上書き防止）
       state.frameLayer.editMode = false;
       const slider = document.getElementById('frame-opacity');
       if(slider) slider.value = Math.round(state.frameLayer.opacity * 100);
       await loadFrameLayerFromDataURL(fl.image || null);
       applyFrameLayerStyle();
+      applyFrameLayerTransform();
     } else {
       applyFrameLayerStyle();
     }
@@ -5512,9 +5682,12 @@ function setupWorkArea(){
   setupHandleDrag(handleL, 'L');
   setupHandleDrag(handleR, 'R');
 
-  // ボディドラッグで全体移動
+  // ワークエリアの移動（スライド）は「中ボタンドラッグ(マウス)」または「タッチ」のみ。
+  // 左クリック/ペンはタイムライン操作（スクラブ/伸縮）に通す（誤移動の防止）。
   let bodyDrag = null;
   body.addEventListener('pointerdown', e => {
+    const isMove = (e.pointerType === 'mouse' && e.button === 1) || e.pointerType === 'touch';
+    if(!isMove) return; // 左/ペンは bubble させてタイムライン側に委ねる
     e.stopPropagation();
     e.preventDefault();
     body.setPointerCapture(e.pointerId);
@@ -5550,6 +5723,9 @@ function setupWorkArea(){
   }
   body.addEventListener('pointerup', endBodyDrag);
   body.addEventListener('pointercancel', endBodyDrag);
+  // 中ボタンのオートスクロール抑止
+  body.addEventListener('mousedown', e => { if(e.button === 1) e.preventDefault(); });
+  body.addEventListener('auxclick', e => { if(e.button === 1) e.preventDefault(); });
 
   // ============================================================
   // ペンスクラブで time-track 全体をタイムライン拡縮
@@ -5601,46 +5777,6 @@ function setupWorkArea(){
     }
   }, { passive: true });
 
-  // ダブルタップで全範囲/最小範囲をサイクル
-  let lastTapT = 0;
-  let cycleState = 0; // 0=全範囲, 1=現在フレームのみ, 2=元の状態（保存値）
-  let savedRange = null;
-  body.addEventListener('pointerdown', e => {
-    const now = performance.now();
-    if(now - lastTapT < 350){
-      // ダブルタップ
-      if(cycleState === 0){
-        savedRange = { start: state.workStart, end: state.workEnd };
-        // 全範囲
-        state.workStart = 0;
-        state.workEnd = totalTicks();
-        cycleState = 1;
-      } else if(cycleState === 1){
-        // 現在フレームのみ
-        const startTick = state.frames.slice(0, state.currentFrame).reduce((s, f) => s + f.duration, 0);
-        const dur = state.frames[state.currentFrame]?.duration || 1;
-        state.workStart = startTick;
-        state.workEnd = startTick + dur;
-        cycleState = 2;
-      } else {
-        // 元に戻す
-        if(savedRange){
-          state.workStart = Math.min(savedRange.start, totalTicks());
-          state.workEnd = Math.min(savedRange.end, totalTicks());
-        } else {
-          state.workStart = 0;
-          state.workEnd = totalTicks();
-        }
-        cycleState = 0;
-      }
-      updateTimeTrack();
-      updateDurInfo();
-      markMetaDirty();
-      lastTapT = 0;
-    } else {
-      lastTapT = now;
-    }
-  });
 }
 
 // ワークエリアを「総コマ数に合わせる」
@@ -5943,46 +6079,68 @@ document.getElementById('btn-frame-clear').addEventListener('click', () => {
   pushFrameLayerHistory();
 });
 
-// ── REF IMAGE（原寸・中央・ドラッグ移動/拡縮）UI ──
+// ── 共通MOVE/中央 ＋ REF IMAGE UI ──
 function applyRefImgUI(){
-  const r = state.refImg;
-  const mv = document.getElementById('btn-refimg-move');
-  if(mv) mv.classList.toggle('on', r.moveMode);
+  const mv = document.getElementById('btn-ref-move');
+  if(mv) mv.classList.toggle('on', state.refMoveMode);
+  const e = refFindSel();
+  // REF IMAGE 濃度スライダーは「画像/アニメ選択時」のみ（FRAMEは専用スライダー）
+  const useObj = (e && e.type !== 'frame') ? e.obj : null;
   const op = document.getElementById('refimg-opacity');
   const ov = document.getElementById('refimg-opacity-val');
-  if(op && document.activeElement !== op) op.value = Math.round(r.opacity*100);
-  if(ov) ov.textContent = Math.round(r.opacity*100)+'%';
+  const val = useObj ? Math.round(useObj.opacity*100) : 60;
+  if(op){ op.disabled = !useObj; if(document.activeElement !== op) op.value = val; }
+  if(ov) ov.textContent = val + '%';
+  const info = document.getElementById('refimg-sel');
+  if(info) info.textContent = state.refImages.length ? (state.refImages.length + '枚') : '—';
+  const sinfo = document.getElementById('ref-sel-info');
+  if(sinfo) sinfo.textContent = e ? (({img:'IMG', anim:'ANM', frame:'FRAME'})[e.type] + ' 選択中') : '未選択';
+  const fsh = document.getElementById('frame-sect-h');
+  if(fsh) fsh.style.color = (state.refSel && state.refSel.type === 'frame') ? 'var(--acid)' : '';
 }
 function fileToDataURL(file){
   return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej(fr.error); fr.readAsDataURL(file); });
 }
+// 共通 MOVE トグル
+document.getElementById('btn-ref-move').addEventListener('click', () => {
+  state.refMoveMode = !state.refMoveMode;
+  applyRefImgUI();
+  drawCanvas.style.cursor = state.refMoveMode ? 'move' : ((state.tool==='fill')?'cell':'crosshair');
+});
+// 共通 中央（選択中を原寸中央）
+document.getElementById('btn-ref-center').addEventListener('click', refCenterSel);
+// FRAMEレイヤーを選択（MOVE/中央の対象に）
+document.getElementById('frame-sect-h').addEventListener('click', () => {
+  state.refSel = { type:'frame' };
+  applyRefImgUI(); buildRefList(); renderRefImg(); renderRefLayer();
+});
 document.getElementById('btn-refimg-load').addEventListener('click', () => document.getElementById('refimg-input').click());
 document.getElementById('refimg-input').addEventListener('change', async e => {
-  const file = e.target.files && e.target.files[0]; e.target.value='';
-  if(!file) return;
+  const files = Array.from(e.target.files || []); e.target.value='';
+  if(!files.length) return;
   try{
-    const url = await fileToDataURL(file);
-    await loadRefImageFromSrc(url, false); // 原寸・中央で配置
+    for(const f of files){ const url = await fileToDataURL(f); await loadRefImageFromSrc(url, {}); }
     markMetaDirty(); scheduleSave();
   }catch(err){ await modalAlert('画像の読み込みに失敗しました'); }
 });
-document.getElementById('btn-refimg-move').addEventListener('click', () => {
-  if(!state.refImg.img){ modalAlert('先に LOAD で参照画像を読み込んでください'); return; }
-  state.refImg.moveMode = !state.refImg.moveMode;
-  applyRefImgUI();
-  drawCanvas.style.cursor = state.refImg.moveMode ? 'move' : ((state.tool==='fill')?'cell':'crosshair');
-});
-document.getElementById('btn-refimg-fit').addEventListener('click', refImgCenter);
+// × IMG: 選択中の参照画像を削除（未選択なら最後の画像）
 document.getElementById('btn-refimg-clear').addEventListener('click', () => {
-  state.refImg.img = null; state.refImg.src = null; state.refImg.moveMode = false;
-  renderRefImg(); applyRefImgStyle(); applyRefImgUI();
-  drawCanvas.style.cursor = (state.tool==='fill')?'cell':'crosshair';
-  markMetaDirty(); scheduleSave();
+  const e = refFindSel();
+  if(e && e.type === 'img'){
+    const i = state.refImages.findIndex(o => o.id === e.obj.id);
+    if(i >= 0) state.refImages.splice(i, 1);
+    state.refSel = null;
+  } else if(state.refImages.length){
+    state.refImages.pop();
+  } else { return; }
+  renderRefImg(); applyRefImgUI(); markMetaDirty(); scheduleSave();
 });
 document.getElementById('refimg-opacity').addEventListener('input', e => {
-  state.refImg.opacity = Math.max(0, Math.min(1, (parseInt(e.target.value,10)||0)/100));
-  document.getElementById('refimg-opacity-val').textContent = Math.round(state.refImg.opacity*100)+'%';
-  renderRefImg(); applyRefImgStyle();
+  const sel = refFindSel(); if(!sel || sel.type === 'frame') return;
+  sel.obj.opacity = Math.max(0, Math.min(1, (parseInt(e.target.value,10)||0)/100));
+  document.getElementById('refimg-opacity-val').textContent = Math.round(sel.obj.opacity*100)+'%';
+  renderRefImg(); renderRefLayer();
+  if(sel.type === 'anim') buildRefList();
 });
 document.getElementById('refimg-opacity').addEventListener('change', () => { markMetaDirty(); scheduleSave(); });
 document.getElementById('btn-add-frame').addEventListener('click', () => addFrame(false));
@@ -6107,7 +6265,23 @@ const SHORTCUT_ACTIONS = [
   { id:'newFrame',  label:'新規フレーム',       def:'N',          run:()=>document.getElementById('btn-add-frame')?.click() },
   { id:'dupFrame',  label:'フレーム複製',       def:'D',          run:()=>document.getElementById('btn-dup-frame')?.click() },
   { id:'split',     label:'SPLIT（分割）',      def:'S',          run:()=>splitAtPlayhead() },
-  { id:'workReset', label:'ワークエリア全範囲', def:'W',          run:()=>{ state.workStart=0; state.workEnd=totalTicks(); updateTimeTrack(); updateDurInfo(); markMetaDirty(); } },
+  { id:'workReset', label:'ワークエリア=選択FRAME/全範囲', def:'W', run:()=>{
+      const sel = state.selectedFrameIds;
+      if(sel && sel.size > 0){
+        // 選択中フレームの範囲にワークエリアをFIT
+        let lo = Infinity, hi = 0, acc = 0;
+        for(const f of state.frames){
+          const start = acc, end = acc + f.duration;
+          if(sel.has(f.id)){ if(start < lo) lo = start; if(end > hi) hi = end; }
+          acc = end;
+        }
+        if(lo < hi){ state.workStart = lo; state.workEnd = hi; }
+      } else {
+        state.workStart = 0; state.workEnd = totalTicks();
+      }
+      ensureWorkAreaValid();
+      updateTimeTrack(); updateDurInfo(); markMetaDirty();
+    } },
   { id:'play',      label:'再生 / 停止',        def:'Space',      prevent:true, run:()=>document.getElementById('btn-play')?.click() },
   { id:'prevFrame', label:'前のコマ',           def:'ArrowLeft',  prevent:true, run:()=>document.getElementById('strip-prev')?.click() },
   { id:'nextFrame', label:'次のコマ',           def:'ArrowRight', prevent:true, run:()=>document.getElementById('strip-next')?.click() },
@@ -6307,27 +6481,29 @@ function makeVResize(handle, target, opts){
   handle.addEventListener('pointerup', end);
   handle.addEventListener('pointercancel', end);
 }
-// 設定パネル本体が画面内に収まる最大高さ（グリップが画面外に出ないように）
-function settingsMaxHeight(){
-  const body=document.getElementById('settings-panel-body');
-  const top=body.getBoundingClientRect().top;
+// パネル本体が画面内に収まる最大高さ（グリップが画面外に出ないように）
+function panelMaxH(body){
+  const top = body.getBoundingClientRect().top;
   return Math.max(80, window.innerHeight - top - 24); // 24=グリップ＋余白
 }
-// 設定パネル: セクション境界（段）でスナップ。ただし画面内に収まる範囲に制限
-function settingsSnapHeight(curH){
-  const body=document.getElementById('settings-panel-body');
-  const sects=[...body.querySelectorAll('.ref-sect')];
-  if(!sects.length) return null;
-  const maxH=settingsMaxHeight();
-  const padB=parseFloat(getComputedStyle(body).paddingBottom)||0;
-  const bounds=sects.map(s => Math.min(maxH, (s.offsetTop - body.offsetTop) + s.offsetHeight + padB));
+// セクション境界（段）でスナップ。画面内に収まる範囲に制限
+function sectionSnapH(body, curH){
+  const maxH = panelMaxH(body);
+  const sects = [...body.querySelectorAll('.ref-sect')];
+  if(!sects.length) return Math.min(maxH, Math.max(60, curH));
+  const padB = parseFloat(getComputedStyle(body).paddingBottom) || 0;
+  const bounds = sects.map(s => Math.min(maxH, (s.offsetTop - body.offsetTop) + s.offsetHeight + padB));
   bounds.push(Math.min(maxH, body.scrollHeight)); // 一番下＝画面に収まる最大（超過分は内部スクロール）
-  let best=bounds[0], bd=Infinity;
-  for(const b of bounds){ const d=Math.abs(b-curH); if(d<bd){ bd=d; best=b; } }
+  let best = bounds[0], bd = Infinity;
+  for(const b of bounds){ const d = Math.abs(b - curH); if(d < bd){ bd = d; best = b; } }
   return Math.max(60, Math.round(best));
 }
-makeVResize(document.getElementById('settings-resize'), document.getElementById('settings-panel-body'), { min:60, max:settingsMaxHeight, snap:settingsSnapHeight });
-makeVResize(document.getElementById('palette-resize'), document.getElementById('palette'), { min:60 });
+const _setBody = document.getElementById('settings-panel-body');
+makeVResize(document.getElementById('settings-resize'), _setBody, { min:60, max:()=>panelMaxH(_setBody), snap:(h)=>sectionSnapH(_setBody, h) });
+const _refBody = document.getElementById('ref-panel-body');
+if(_refBody) makeVResize(document.getElementById('ref-resize'), _refBody, { min:60, max:()=>panelMaxH(_refBody), snap:(h)=>sectionSnapH(_refBody, h) });
+const _palEl = document.getElementById('palette');
+makeVResize(document.getElementById('palette-resize'), _palEl, { min:60, max:()=>panelMaxH(_palEl) });
 
 // ── フローティングパネル: クリックしたものを最前面に ──
 let gPanelZ = 140;
@@ -6442,7 +6618,8 @@ window.addEventListener('resize', () => {
   updateResLabel();     // 読込後の作業キャンバスサイズをラベルに反映
   fitToStage();         // 復元サイズに合わせて再フィット（applyZoom内でrenderGuides/renderRefImgも実行）
   applyGuideUI();
-  applyRefImgStyle(); applyRefImgUI(); // 参照画像の表示/UIを反映
+  applyRefMaster();    // REF表示マスター（パネル連動）を反映
+  applyRefImgUI();     // 参照画像UIを反映
 })();
 
 // ページ離脱前に強制保存

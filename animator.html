@@ -1319,6 +1319,13 @@ input[type=range]::-moz-range-thumb{
         title="補正の強さ">
       <span class="tb-stab-val" id="tb-stab-val">50</span>
     </div>
+
+    <!-- 筆圧カーブ（筆圧ペンON時に有効） -->
+    <div class="tb-stab" id="tb-pcurve">
+      <span class="lbl">PRS</span>
+      <button class="tb-stab-mode" id="tb-pcurve-btn"
+        title="筆圧カーブを切替（クリックで LIN → SOFT → HARD）&#10;LIN: 線形&#10;SOFT: 軽い筆圧が細く出る（入り抜き強調）&#10;HARD: 軽い筆圧でもしっかり太い&#10;※PENダブルタップの筆圧モードON時に有効">LIN</button>
+    </div>
   </div>
 
   <!-- STAGE -->
@@ -1724,6 +1731,12 @@ const state = {
     try{ const s = JSON.parse(localStorage.getItem('animator_stab_v1'));
       if(s && typeof s==='object') return {mode:s.mode||'avg', avg:s.avg??0.5, pull:s.pull??0.4}; }catch(e){}
     return { mode:'avg', avg:0.5, pull:0.4 };
+  })(),
+  // 筆圧カーブ: 'linear' | 'soft'(軽い筆圧が細く出る=入り抜き強調) | 'hard'(軽くても太い)
+  pressureCurve: (() => {
+    try{ const v = localStorage.getItem('animator_pcurve_v1');
+      if(v === 'soft' || v === 'hard' || v === 'linear') return v; }catch(e){}
+    return 'linear';
   })(),
   // セル基準幅 (px)。Alt+ホイール で変更可能
   cellBaseW: 80,
@@ -4416,11 +4429,17 @@ function smoothPoint(x, y){
 function activeDrawCtx(){
   return state.frameLayer.editMode ? frameLayerCtx : drawCtx;
 }
+// 筆圧カーブ適用（0..1 → 0..1）
+function applyPressureCurve(p){
+  if(state.pressureCurve === 'soft') return Math.pow(p, 1.8);   // 軽い筆圧が細く出る（入り抜き強調）
+  if(state.pressureCurve === 'hard') return Math.pow(p, 0.55);  // 軽い筆圧でもしっかり太い
+  return p;
+}
 // 筆圧 → 半径（現在のペンサイズを最大半径とする）
 function pressureRadius(pressure){
   const maxR = state.penSize === 1 ? 3 : state.penSize === 2 ? 6 : 16;
   const p = Math.max(0.08, Math.min(1, pressure || 0.5));
-  return Math.max(0.7, maxR * p);
+  return Math.max(0.7, maxR * applyPressureCurve(p));
 }
 let lastR = 1;
 function startStroke(clientX, clientY, pressure){
@@ -4529,7 +4548,13 @@ drawCanvas.addEventListener('pointermove', e => {
   document.getElementById('hud-coord').textContent = `${x} · ${y}`;
   if(drawing && e.pointerId === drawingPointerId){
     e.preventDefault();
-    continueStroke(e.clientX, e.clientY, e.pressure);
+    // Apple Pencil等の高レート入力（240Hz）を間引かず全点使う。非対応環境はそのまま1点
+    const coalesced = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+    if(coalesced && coalesced.length){
+      for(const ce of coalesced) continueStroke(ce.clientX, ce.clientY, ce.pressure);
+    } else {
+      continueStroke(e.clientX, e.clientY, e.pressure);
+    }
   }
 });
 
@@ -6146,6 +6171,22 @@ stabRange.addEventListener('input', () => {
 });
 stabRange.addEventListener('change', saveStab);
 renderStab();
+
+// ===== 筆圧カーブ切替（LIN → SOFT → HARD）=====
+const PCURVE_ORDER = ['linear', 'soft', 'hard'];
+const PCURVE_LABEL = { linear:'LIN', soft:'SOFT', hard:'HARD' };
+const pcurveBtn = document.getElementById('tb-pcurve-btn');
+function renderPCurve(){
+  pcurveBtn.textContent = PCURVE_LABEL[state.pressureCurve];
+  pcurveBtn.classList.toggle('on', state.pressureCurve !== 'linear');
+}
+pcurveBtn.addEventListener('click', () => {
+  const i = PCURVE_ORDER.indexOf(state.pressureCurve);
+  state.pressureCurve = PCURVE_ORDER[(i + 1) % PCURVE_ORDER.length];
+  try{ localStorage.setItem('animator_pcurve_v1', state.pressureCurve); }catch(e){}
+  renderPCurve();
+});
+renderPCurve();
 
 // TIME表示 タップで コマ ↔ 秒 切替 / Shift+タップで最大尺サイクル(15→30→60→120秒)
 document.getElementById('dur-info').addEventListener('click', e => {

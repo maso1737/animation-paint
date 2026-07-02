@@ -2886,20 +2886,25 @@ function drawDot2(ctx, x, y, color){
   ctx.fillStyle = color;
   ctx.fillRect(x, y, 2, 2);
 }
+// 円形ドットを水平スパン（1行=1矩形）で塗る。1px毎判定と塗りピクセルは完全同一で
+// fillRect/clearRect の呼び出し回数を πr²回 → 約2r回 に削減（r=10で約15倍）
+function fillCircleRows(x, y, r, row){
+  const ir = Math.max(1, Math.round(r));
+  const r2 = r * r;
+  for(let dy = -ir; dy < ir; dy++){
+    const ddy = dy + 0.5;
+    const s2 = r2 - ddy * ddy;
+    if(s2 <= 0) continue;
+    const s = Math.sqrt(s2);
+    const x0 = Math.max(-ir, Math.ceil(-s - 0.5));
+    const x1 = Math.min(ir - 1, Math.floor(s - 0.5));
+    if(x1 >= x0) row(x + x0, y + dy, x1 - x0 + 1);
+  }
+}
 // 20pxドット（円形、ピクセル単位）
 function drawDot20(ctx, x, y, color){
   ctx.fillStyle = color;
-  const r = 10;
-  // 整数ピクセルで円を埋める
-  for(let dy = -r; dy < r; dy++){
-    for(let dx = -r; dx < r; dx++){
-      // 中心からの距離。dx+0.5, dy+0.5 でピクセル中心
-      const ddx = dx + 0.5, ddy = dy + 0.5;
-      if(ddx*ddx + ddy*ddy <= r*r){
-        ctx.fillRect(x + dx, y + dy, 1, 1);
-      }
-    }
-  }
+  fillCircleRows(x, y, 10, (px, py, w) => ctx.fillRect(px, py, w, 1));
 }
 
 function drawDot(ctx, x, y, size, color){
@@ -2912,13 +2917,7 @@ function drawDot(ctx, x, y, size, color){
 function drawDotRadius(ctx, x, y, r, color){
   ctx.fillStyle = color;
   if(r <= 0.7){ ctx.fillRect(x, y, 1, 1); return; }
-  const ir = Math.max(1, Math.round(r));
-  for(let dy = -ir; dy < ir; dy++){
-    for(let dx = -ir; dx < ir; dx++){
-      const ddx = dx + 0.5, ddy = dy + 0.5;
-      if(ddx*ddx + ddy*ddy <= r*r) ctx.fillRect(x + dx, y + dy, 1, 1);
-    }
-  }
+  fillCircleRows(x, y, r, (px, py, w) => ctx.fillRect(px, py, w, 1));
 }
 // ブレゼンハム直線を1ピクセルずつ辿る共通歩行。visit(x, y, t) t=進行度0..1
 function bresenham(x0, y0, x1, y1, visit){
@@ -2957,15 +2956,7 @@ function eraseDot(ctx, x, y, size){
   } else if(size === 2){
     ctx.clearRect(x, y, 2, 2);
   } else {
-    const r = 10;
-    for(let dy = -r; dy < r; dy++){
-      for(let dx = -r; dx < r; dx++){
-        const ddx = dx + 0.5, ddy = dy + 0.5;
-        if(ddx*ddx + ddy*ddy <= r*r){
-          ctx.clearRect(x + dx, y + dy, 1, 1);
-        }
-      }
-    }
+    fillCircleRows(x, y, 10, (px, py, w) => ctx.clearRect(px, py, w, 1));
   }
 }
 function eraseLine(ctx, x0, y0, x1, y1, size){

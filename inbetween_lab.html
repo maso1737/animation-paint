@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INBETWEEN LAB — ラフ中割 / スペーシング検証</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1c1f26; --line:#2a2f39; --ink:#e8eaee;
+    --muted:#8b93a3; --accent:#e0b23a; --a:#ff5a6e; --b:#4aa8ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.5 -apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}
+  header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;
+    align-items:baseline;gap:12px}
+  header h1{font-size:14px;letter-spacing:.08em;margin:0;font-weight:700}
+  header .sub{color:var(--muted);font-size:11px}
+  .wrap{display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card h2{margin:0 0 8px;font-size:11px;letter-spacing:.1em;color:var(--muted);
+    text-transform:uppercase;font-weight:700}
+  canvas{background:#fff;border-radius:6px;display:block;touch-action:none}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  button{background:#262b34;color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer}
+  button:hover{border-color:#3a4150}
+  button.on{background:var(--accent);color:#1a1a1a;border-color:var(--accent);font-weight:700}
+  button.a.on{background:var(--a);border-color:var(--a);color:#fff}
+  button.b.on{background:var(--b);border-color:var(--b);color:#fff}
+  label{font-size:11px;color:var(--muted)}
+  input[type=range]{accent-color:var(--accent)}
+  .val{color:var(--accent);font-variant-numeric:tabular-nums;min-width:34px;
+    display:inline-block;text-align:right}
+  .hint{color:var(--muted);font-size:11px;line-height:1.6}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+</style>
+</head>
+<body>
+<header>
+  <h1>INBETWEEN LAB</h1>
+  <span class="sub">原画A→原画Bのラフ中割（クロスモーフ）＋スペーシング/イーズ検証 — 単体プロトタイプ</span>
+</header>
+
+<div class="wrap">
+  <!-- 原画エディタ -->
+  <div class="col">
+    <div class="card">
+      <h2>原画エディタ</h2>
+      <div class="row" style="margin-bottom:8px">
+        <div class="seg">
+          <button id="tabA" class="a on">原画 A</button>
+          <button id="tabB" class="b">原画 B</button>
+        </div>
+        <button id="pen" class="on">ペン</button>
+        <button id="eraser">消しゴム</button>
+        <label>太さ <input id="size" type="range" min="1" max="24" value="4" style="width:70px"></label>
+        <button id="clear">クリア</button>
+      </div>
+      <canvas id="edit" width="440" height="440"></canvas>
+      <div class="hint" style="margin-top:6px">
+        もう一方の原画が薄く表示されます（オニオン）。まずAを描き、タブでBに切替えて動きの終点を描いてください。
+      </div>
+    </div>
+  </div>
+
+  <!-- プレビュー -->
+  <div class="col">
+    <div class="card">
+      <h2>中割プレビュー</h2>
+      <canvas id="preview" width="440" height="440"></canvas>
+      <div class="row" style="margin-top:8px">
+        <button id="play" class="on">▶ 再生</button>
+        <label><input id="ping" type="checkbox" checked> 往復</label>
+        <label><input id="ghost" type="checkbox" checked> A/B残像</label>
+        <label>fps <input id="fps" type="range" min="4" max="24" value="12" style="width:70px"><span class="val" id="fpsV">12</span></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="flex:1">フレーム
+          <input id="scrub" type="range" min="0" max="100" value="0" step="1" style="width:100%">
+        </label>
+      </div>
+      <div class="hint" id="frameLbl">— A（原画）</div>
+    </div>
+  </div>
+
+  <!-- タイミング -->
+  <div class="col" style="min-width:300px;flex:1">
+    <div class="card">
+      <h2>スペーシング & イーズ</h2>
+      <div class="row">
+        <label>中割枚数 <input id="count" type="range" min="1" max="15" value="5" style="width:120px"><span class="val" id="countV">5</span></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">カーブ:</span>
+        <div class="seg">
+          <button data-ease="linear" class="ez on">リニア</button>
+          <button data-ease="in" class="ez">イーズイン(加速)</button>
+          <button data-ease="out" class="ez">イーズアウト(減速)</button>
+          <button data-ease="inout" class="ez">イーズインアウト</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>強さ <input id="power" type="range" min="10" max="40" value="20" style="width:140px"><span class="val" id="powerV">2.0</span></label>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="hint" style="margin-bottom:4px">スペーシングチャート（原画間の間隔＝速度感）</div>
+        <canvas id="chart" width="380" height="80" style="background:#111318;border:1px solid var(--line)"></canvas>
+        <div class="hint" style="margin-top:4px">
+          点が詰まる=遅い / 開く=速い。A側で詰まる＝入りがゆっくり(減速スタート)、B側で詰まる＝止めがゆっくり。
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="hint" style="margin-bottom:4px">イーズカーブ（横=時間 / 縦=進行）</div>
+        <canvas id="curve" width="180" height="120" style="background:#111318;border:1px solid var(--line)"></canvas>
+      </div>
+
+      <div class="hint" style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+        ※ 中割の中身はA/Bのクロスモーフ（参考用ラフ）です。線は溶けますが、<b>間の取り方・加速減速の全体感</b>を掴むための下書き用途に割り切っています。上からクリンナップする前提。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- offscreen key frames ----
+const W=440,H=440;
+function mkCanvas(){const c=document.createElement('canvas');c.width=W;c.height=H;return c;}
+const keyA=mkCanvas(), keyB=mkCanvas();
+const ctxA=keyA.getContext('2d'), ctxB=keyB.getContext('2d');
+[ctxA,ctxB].forEach(c=>{c.lineCap='round';c.lineJoin='round';c.strokeStyle='#111';});
+
+const state={active:'A',tool:'pen',size:4,count:5,ease:'linear',power:2.0,
+  playing:true,ping:true,ghost:true,fps:12,frame:0};
+
+// ---- editor ----
+const edit=document.getElementById('edit'), ectx=edit.getContext('2d');
+function curKey(){return state.active==='A'?{c:keyA,x:ctxA}:{c:keyB,x:ctxB};}
+function otherKey(){return state.active==='A'?keyB:keyA;}
+function renderEdit(){
+  ectx.clearRect(0,0,W,H);
+  // onion of the other frame
+  ectx.globalAlpha=0.18;
+  ectx.drawImage(otherKey(),0,0);
+  ectx.globalAlpha=1;
+  ectx.drawImage(curKey().c,0,0);
+}
+let drawing=false,lastP=null;
+function pos(e){const r=edit.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return {x:(t.clientX-r.left)*(W/r.width), y:(t.clientY-r.top)*(H/r.height)};}
+function down(e){e.preventDefault();drawing=true;lastP=pos(e);dot(lastP);}
+function move(e){if(!drawing)return;e.preventDefault();const p=pos(e);stroke(lastP,p);lastP=p;}
+function up(){drawing=false;lastP=null;}
+function cfg(x){x.lineWidth=state.size;
+  if(state.tool==='eraser'){x.globalCompositeOperation='destination-out';x.strokeStyle='rgba(0,0,0,1)';}
+  else{x.globalCompositeOperation='source-over';x.strokeStyle='#111';}}
+function dot(p){const x=curKey().x;cfg(x);x.beginPath();x.arc(p.x,p.y,state.size/2,0,7);
+  x.fillStyle=state.tool==='eraser'?'rgba(0,0,0,1)':'#111';
+  if(state.tool==='eraser'){x.globalCompositeOperation='destination-out';}x.fill();
+  x.globalCompositeOperation='source-over';renderEdit();}
+function stroke(a,b){const x=curKey().x;cfg(x);x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();
+  x.globalCompositeOperation='source-over';renderEdit();}
+edit.addEventListener('mousedown',down);edit.addEventListener('mousemove',move);
+window.addEventListener('mouseup',up);
+edit.addEventListener('touchstart',down,{passive:false});
+edit.addEventListener('touchmove',move,{passive:false});
+edit.addEventListener('touchend',up);
+
+// ---- ease ----
+function ease(u){const p=state.power;
+  switch(state.ease){
+    case'in':return Math.pow(u,p);
+    case'out':return 1-Math.pow(1-u,p);
+    case'inout':return u<.5?.5*Math.pow(2*u,p):1-.5*Math.pow(2-2*u,p);
+    default:return u;
+  }}
+// frame list: 0=A .. N+1=B
+function frameCount(){return state.count+2;}
+function frameT(i){const N=state.count;const u=i/(N+1);return ease(u);}
+
+// ---- preview ----
+const prev=document.getElementById('preview'), pctx=prev.getContext('2d');
+function renderPreview(){
+  const i=state.frame, N=state.count;
+  pctx.clearRect(0,0,W,H);
+  pctx.fillStyle='#fff';pctx.fillRect(0,0,W,H);
+  if(state.ghost){
+    pctx.globalAlpha=0.12;pctx.drawImage(keyA,0,0);
+    pctx.globalAlpha=0.12;pctx.drawImage(keyB,0,0);
+  }
+  const lbl=document.getElementById('frameLbl');
+  if(i===0){pctx.globalAlpha=1;pctx.drawImage(keyA,0,0);lbl.textContent='フレーム 0 — 原画A';}
+  else if(i===N+1){pctx.globalAlpha=1;pctx.drawImage(keyB,0,0);lbl.textContent='フレーム '+(N+1)+' — 原画B';}
+  else{
+    const t=frameT(i);
+    pctx.globalAlpha=1-t;pctx.drawImage(keyA,0,0);
+    pctx.globalAlpha=t;pctx.drawImage(keyB,0,0);
+    lbl.textContent='中割 '+i+'/'+N+'  （進行 t='+t.toFixed(2)+'）';
+  }
+  pctx.globalAlpha=1;
+}
+
+// ---- charts ----
+const chart=document.getElementById('chart'), cctx=chart.getContext('2d');
+function renderChart(){
+  const w=chart.width,h=chart.height,y=h/2,pad=20;
+  cctx.clearRect(0,0,w,h);
+  cctx.strokeStyle='#2a2f39';cctx.beginPath();cctx.moveTo(pad,y);cctx.lineTo(w-pad,y);cctx.stroke();
+  const N=state.count;
+  for(let i=0;i<=N+1;i++){
+    const t=frameT(i);const px=pad+(w-2*pad)*t;
+    const end=(i===0||i===N+1);
+    cctx.fillStyle=i===0?'#ff5a6e':i===N+1?'#4aa8ff':'#e0b23a';
+    cctx.beginPath();cctx.arc(px,y,end?6:4,0,7);cctx.fill();
+    if(end){cctx.fillStyle='#8b93a3';cctx.font='10px sans-serif';
+      cctx.fillText(i===0?'A':'B',px-3,y-10);}
+  }
+}
+const curve=document.getElementById('curve'), vctx=curve.getContext('2d');
+function renderCurve(){
+  const w=curve.width,h=curve.height,pad=10;
+  vctx.clearRect(0,0,w,h);
+  vctx.strokeStyle='#2a2f39';vctx.strokeRect(pad,pad,w-2*pad,h-2*pad);
+  vctx.strokeStyle='#e0b23a';vctx.lineWidth=2;vctx.beginPath();
+  for(let s=0;s<=40;s++){const u=s/40;const t=ease(u);
+    const px=pad+(w-2*pad)*u, py=h-pad-(h-2*pad)*t;
+    s?vctx.lineTo(px,py):vctx.moveTo(px,py);}
+  vctx.stroke();vctx.lineWidth=1;
+}
+
+// ---- playback ----
+let acc=0,last=0;
+function loop(ts){
+  if(!last)last=ts;const dt=ts-last;last=ts;
+  if(state.playing){acc+=dt;const step=1000/state.fps;
+    while(acc>=step){acc-=step;advance();}}
+  requestAnimationFrame(loop);
+}
+let dir=1;
+function advance(){
+  const max=frameCount()-1;
+  if(state.ping){state.frame+=dir;
+    if(state.frame>=max){state.frame=max;dir=-1;}
+    else if(state.frame<=0){state.frame=0;dir=1;}
+  }else{state.frame=(state.frame+1)%(max+1);}
+  syncScrub();renderPreview();
+}
+function syncScrub(){const sc=document.getElementById('scrub');
+  sc.max=frameCount()-1;sc.value=state.frame;}
+
+// ---- UI wiring ----
+const $=id=>document.getElementById(id);
+$('tabA').onclick=()=>{state.active='A';$('tabA').classList.add('on');$('tabB').classList.remove('on');renderEdit();};
+$('tabB').onclick=()=>{state.active='B';$('tabB').classList.add('on');$('tabA').classList.remove('on');renderEdit();};
+$('pen').onclick=()=>{state.tool='pen';$('pen').classList.add('on');$('eraser').classList.remove('on');};
+$('eraser').onclick=()=>{state.tool='eraser';$('eraser').classList.add('on');$('pen').classList.remove('on');};
+$('size').oninput=e=>state.size=+e.target.value;
+$('clear').onclick=()=>{curKey().x.clearRect(0,0,W,H);renderEdit();renderPreview();};
+$('count').oninput=e=>{state.count=+e.target.value;$('countV').textContent=state.count;
+  if(state.frame>frameCount()-1)state.frame=frameCount()-1;
+  syncScrub();renderChart();renderPreview();};
+document.querySelectorAll('.ez').forEach(b=>b.onclick=()=>{
+  state.ease=b.dataset.ease;document.querySelectorAll('.ez').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');renderChart();renderCurve();renderPreview();});
+$('power').oninput=e=>{state.power=+e.target.value/10;$('powerV').textContent=state.power.toFixed(1);
+  renderChart();renderCurve();renderPreview();};
+$('play').onclick=()=>{state.playing=!state.playing;
+  $('play').classList.toggle('on',state.playing);
+  $('play').textContent=state.playing?'▶ 再生':'⏸ 停止';};
+$('ping').onchange=e=>state.ping=e.target.checked;
+$('ghost').onchange=e=>{state.ghost=e.target.checked;renderPreview();};
+$('fps').oninput=e=>{state.fps=+e.target.value;$('fpsV').textContent=state.fps;};
+$('scrub').oninput=e=>{state.playing=false;$('play').classList.remove('on');$('play').textContent='▶ 再生';
+  state.frame=+e.target.value;renderPreview();};
+
+// ---- seed sample drawings so it's not blank ----
+function seed(){
+  ctxA.strokeStyle='#111';ctxA.lineWidth=4;
+  ctxA.beginPath();ctxA.arc(150,150,70,0,7);ctxA.stroke(); // ball left-up
+  ctxB.strokeStyle='#111';ctxB.lineWidth=4;
+  ctxB.beginPath();ctxB.arc(300,300,70,0,7);ctxB.stroke(); // ball right-down
+}
+seed();
+renderEdit();renderChart();renderCurve();syncScrub();renderPreview();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

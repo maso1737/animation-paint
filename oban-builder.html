@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBAN BUILDER — motion comic take rig</title>
+<style>
+/* ============================================================
+   OBAN BUILDER (SPEC_01 P2)
+   画像を置く(PLACE) → カメラを打つ(TAKE) → 単一HTMLに書き出す(EXPORT)。
+   モーションコミック製造機。KINETIC STAGE 準拠:
+   配置系=--rouge / カメラ系=--ice / 背景=PLUM。
+   ============================================================ */
+:root{
+  --bg:#0c061d;
+  --ink:#f2eefc;
+  --ice:#5AE9FF;
+  --rouge:#FF4FA8;
+  --mono:"SF Mono","Consolas","Courier New",monospace;
+  --jp:"Hiragino Kaku Gothic ProN","Yu Gothic Medium","Yu Gothic","Meiryo",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--mono);user-select:none}
+canvas#cv{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+/* ---------- top bar ---------- */
+#bar{
+  position:fixed;left:0;right:0;top:0;z-index:50;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 14px;background:rgba(12,6,29,.92);border-bottom:1px solid rgba(242,238,252,.16);
+  font-size:10px;letter-spacing:.16em;
+}
+#bar .title{letter-spacing:.34em;color:var(--ink);margin-right:8px}
+#bar .title b{color:var(--rouge);font-weight:400}
+.btn{
+  cursor:pointer;border:1px solid var(--ink);background:none;color:var(--ink);
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;padding:6px 12px;
+}
+.btn:hover{background:var(--ink);color:var(--bg)}
+.btn.mode{border-color:var(--rouge);color:var(--rouge)}
+.btn.mode.on{background:var(--rouge);color:var(--bg)}
+.btn.mode.ice{border-color:var(--ice);color:var(--ice)}
+.btn.mode.ice.on{background:var(--ice);color:var(--bg)}
+.btn.ex{border-color:var(--ice);color:var(--ice)}
+.btn.ex:hover{background:var(--ice);color:var(--bg)}
+#hint{width:100%;opacity:.55;font-family:var(--jp);letter-spacing:.05em;font-size:10px;margin-top:4px}
+
+/* ---------- KF cards (TAKE) ---------- */
+#cards{
+  position:fixed;right:12px;top:86px;bottom:96px;width:min(300px,30vw);z-index:40;display:none;
+  overflow-y:auto;border:1px solid var(--ice);background:rgba(12,6,29,.92);padding:10px;
+  font-size:10px;letter-spacing:.12em;
+}
+body.take #cards{display:block}
+.edc{border-bottom:1px dashed rgba(90,233,255,.3);padding:7px 0}
+.edc-h b{color:var(--ice)}
+.edc label{display:block;margin-top:4px;opacity:.85}
+.edc select{background:var(--bg);color:var(--ink);border:1px solid var(--ink);font-family:var(--mono);font-size:10px}
+.edc input[type=range]{width:52%;vertical-align:middle;accent-color:var(--ice)}
+.edb{cursor:pointer;border:1px solid var(--ink);background:none;color:var(--ink);font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:3px 7px;margin-left:3px}
+.edb:hover{background:var(--ice);border-color:var(--ice);color:var(--bg)}
+.edc.sel{background:rgba(90,233,255,.08);border-left:2px solid var(--ice);padding-left:6px}
+
+/* ---------- selected panel chip (PLACE) ---------- */
+#chip{
+  position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:40;display:none;
+  border:1px solid var(--rouge);background:rgba(12,6,29,.94);padding:10px 14px;
+  font-size:10px;letter-spacing:.14em;white-space:nowrap;
+}
+body.place #chip.sel{display:block}
+#chip .nm{color:var(--rouge);margin-right:10px}
+#chip input[type=range]{width:90px;vertical-align:middle;accent-color:var(--rouge);margin:0 6px}
+#chip .btn{padding:4px 9px;margin-left:4px;border-color:var(--rouge);color:var(--rouge)}
+#chip .btn:hover{background:var(--rouge);color:var(--bg)}
+#chip select{background:var(--bg);color:var(--rouge);border:1px solid var(--rouge);font-family:var(--mono);font-size:10px;margin:0 6px}
+#chip{line-height:2.2;white-space:normal;max-width:92vw}
+#crumb{color:var(--rouge);letter-spacing:.2em}
+#crumb b{font-weight:400;color:var(--ink)}
+
+/* ---------- drop hint / toast ---------- */
+#drop{
+  position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;
+  pointer-events:none;color:var(--ink);
+}
+#drop .big{font-size:clamp(20px,3vw,34px);letter-spacing:.2em;opacity:.8}
+#drop .sm{font-family:var(--jp);font-size:12px;opacity:.55;line-height:2;text-align:center}
+#drop.hide{display:none}
+body.dragover #drop{outline:2px dashed var(--rouge);outline-offset:-24px}
+#toast{
+  position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:60;display:none;
+  border:1px solid var(--ice);background:rgba(12,6,29,.96);color:var(--ice);
+  padding:8px 16px;font-size:10px;letter-spacing:.2em;
+}
+
+/* ---------- SATSUEI FX modal (V2-C — 撮影系=琥珀) ---------- */
+:root{--amber:#FFC94F}
+#fx-modal{
+  position:fixed;right:12px;top:86px;bottom:16px;width:min(340px,34vw);z-index:70;display:none;
+  border:1px solid var(--amber);background:rgba(12,6,29,.95);
+  font-size:10px;letter-spacing:.14em;overflow:hidden;
+}
+body.fxopen #fx-modal{display:flex;flex-direction:column}
+#fx-head{padding:10px 12px;border-bottom:1px solid rgba(255,201,79,.4);color:var(--amber)}
+#fx-head b{font-weight:400;opacity:.7}
+#fx-head .btn{float:right;border-color:var(--amber);color:var(--amber);padding:3px 8px}
+#fx-head .fx-note{clear:both;font-family:var(--jp);letter-spacing:.05em;opacity:.55;margin-top:6px}
+#fx-body{flex:1;overflow-y:auto;padding:10px 12px}
+#fx-body label{display:block;margin:6px 0;cursor:pointer}
+#fx-body .fx-master{color:var(--amber);letter-spacing:.24em;border-bottom:1px dashed rgba(255,201,79,.4);padding-bottom:8px}
+#fx-body .fx-ent{border-bottom:1px dashed rgba(255,201,79,.25);padding:6px 0}
+#fx-body .fx-ent>label{color:var(--amber)}
+#fx-body .fx-row{display:flex;align-items:center;gap:6px;margin:3px 0;opacity:.9}
+#fx-body .fx-row .k{width:9em;flex:none;opacity:.7}
+#fx-body .fx-row input[type=range]{flex:1;accent-color:var(--amber)}
+#fx-body .fx-row .v{width:4em;text-align:right;font-variant-numeric:tabular-nums}
+#fx-body input[type=checkbox]{accent-color:var(--amber)}
+.btn.fx{border-color:var(--amber);color:var(--amber)}
+.btn.fx:hover{background:var(--amber);color:var(--bg)}
+</style>
+</head>
+<body class="place">
+
+<canvas id="cv"></canvas>
+
+<div id="bar">
+  <span class="title">OBAN <b>BUILDER</b></span>
+  <button class="btn mode on" id="m-place">1. PLACE 配置</button>
+  <button class="btn mode ice" id="m-take">2. TAKE カメラ</button>
+  <button class="btn ex" id="b-export">3. EXPORT ▸ HTML</button>
+  <span style="width:14px"></span>
+  <button class="btn" id="b-copy">COPY PROJ</button>
+  <button class="btn" id="b-paste">PASTE PROJ</button>
+  <button class="btn" id="b-clear">CLEAR</button>
+  <button class="btn" id="b-guide">GUIDE [G]</button>
+  <button class="btn mode" id="b-frame">+ FRAME</button>
+  <button class="btn fx" id="b-fx">FX 撮影 [F]</button>
+  <span id="crumb"></span>
+  <span id="hint">画像をD&D（連番4枚以上は自動でシーケンス化）。PLACE: ドラッグ=移動 / [ ]=前後 / フレームに重ねて離す=格納 / ダブルクリック=フレーム内へ / M=マスク編集。TAKE: C=CAPTURE / ↑↓=KF移動 / SPACE=PREVIEW。G=ガイド / Ctrl+Z・Ctrl+Shift+Z。</span>
+</div>
+
+<div id="cards"></div>
+
+<div id="chip"></div><!-- V2-B: 選択対象(パネル/シーケンス/フレーム)に応じて動的生成 -->
+
+<div id="drop">
+  <div class="big">DROP IMAGES HERE</div>
+  <div class="sm">コミックのコマ/パネル画像をドロップすると縦に並びます。<br>並べて、カメラを打って、1本のスクロール作品として書き出せます。</div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ==================== SATSUEI FX MODAL (V2-C / SPEC_06 P2) ==================== -->
+<div id="fx-modal">
+  <div id="fx-head"><span>SATSUEI FX — take.fx <b>[rt]</b></span><button class="btn" id="fx-close">✕ [Esc]</button>
+    <div class="fx-note">プレビュー(SPACE)と書き出しビューアに適用。編集中はOFF（軽量優先）</div></div>
+  <div id="fx-body"></div>
+</div>
+
+<script id="satsuei-core">
+/* ===== SATSUEI FX CORE (satsuei-fx-kit) ===== */
+/* ============================================================
+ * SATSUEI FX CORE — 撮影処理キット 正準参照実装 (v1)
+ * ------------------------------------------------------------
+ * 単一HTMLに <script> としてそのまま複製して使う（共有ライブラリ化しない方針）。
+ * 依存ゼロ / WebGL1（ほぼ全ブラウザ対応）/ WebGL不可なら available=false で素通し。
+ * fxParams のスキーマ（SPEC_06_SATSUEI_KIT.md §2 が正）:
+ *   { version:1, enabled:true, chain:[ {t:'diffusion', on:true, p:{...}}, ... ] }
+ * ============================================================ */
+'use strict';
+
+/* ---------- 既定パラメータ（新規プロジェクトの初期値） ---------- */
+function makeDefaultFx(){
+  return {
+    version: 1,
+    enabled: false,
+    chain: [
+      { t:'mb',        on:false, p:{ shutter:180, samples:8, rtStrength:1.0 } },
+      { t:'dof',       on:false, p:{ focusZ:0, range:400, maxBlur:12 } },
+      { t:'diffusion', on:true,  p:{ threshold:0.55, radius:1.0, gain:0.8, mode:0 } },
+      { t:'para',      on:false, p:{ angle:120, c1:'#ffc890', a1:0.30, c2:'#281866', a2:0.25, mid:0.5, soft:0.45 } },
+      { t:'grade',     on:true,  p:{ lift:0.0, gamma:1.0, gain:1.0, sat:1.0, temp:0.0 } },
+      { t:'vignette',  on:true,  p:{ amount:0.25, soft:0.55 } },
+      { t:'grain',     on:true,  p:{ amount:0.06, size:1.5, mono:1 } },
+      { t:'glitch',    on:false, p:{ amount:0.15, bands:24, rgb:0.5, speed:8 } }
+    ]
+  };
+}
+
+/* ---------- FX定義レジストリ ----------
+ * 新エフェクト追加: 1.FX_DEFS 2.FRAG 3.apply switch 4.makeDefaultFx chain の4点セット。
+ * UI はホストが FX_DEFS から自動生成するので、ホスト側UIの改修は不要。 */
+const FX_DEFS = {
+  mb:        { label:'MOTION BLUR', tier:'temporal+frame',
+               ui:[ {k:'shutter',label:'SHUTTER°',min:0,max:360,step:5},
+                    {k:'samples',label:'SAMPLES(final)',min:2,max:32,step:1},
+                    {k:'rtStrength',label:'RT STRENGTH',min:0,max:2,step:0.05} ] },
+  dof:       { label:'DEPTH OF FIELD', tier:'layer',
+               ui:[ {k:'focusZ',label:'FOCUS Z',min:-800,max:2000,step:10},
+                    {k:'range',label:'RANGE',min:50,max:2000,step:10},
+                    {k:'maxBlur',label:'MAX BLUR px',min:0,max:40,step:1} ] },
+  diffusion: { label:'DIFFUSION / GLOW', tier:'frame',
+               ui:[ {k:'threshold',label:'THRESHOLD',min:0,max:1,step:0.01},
+                    {k:'radius',label:'RADIUS',min:0.2,max:3,step:0.05},
+                    {k:'gain',label:'GAIN',min:0,max:2,step:0.05},
+                    {k:'mode',label:'MODE 0=SCREEN 1=ADD',min:0,max:1,step:1} ] },
+  para:      { label:'PARA (パラフィン)', tier:'frame',
+               ui:[ {k:'angle',label:'ANGLE°',min:0,max:360,step:5},
+                    {k:'a1',label:'ALPHA 1',min:0,max:1,step:0.01},
+                    {k:'a2',label:'ALPHA 2',min:0,max:1,step:0.01},
+                    {k:'mid',label:'MID',min:0,max:1,step:0.01},
+                    {k:'soft',label:'SOFT',min:0.02,max:1,step:0.01} ],
+               colors:['c1','c2'] },
+  grade:     { label:'GRADE (色調)', tier:'frame',
+               ui:[ {k:'lift',label:'LIFT',min:-0.3,max:0.3,step:0.005},
+                    {k:'gamma',label:'GAMMA',min:0.3,max:2.4,step:0.01},
+                    {k:'gain',label:'GAIN',min:0.3,max:2,step:0.01},
+                    {k:'sat',label:'SAT',min:0,max:2,step:0.01},
+                    {k:'temp',label:'TEMP',min:-1,max:1,step:0.01} ] },
+  vignette:  { label:'VIGNETTE', tier:'frame',
+               ui:[ {k:'amount',label:'AMOUNT',min:0,max:1,step:0.01},
+                    {k:'soft',label:'SOFT',min:0.05,max:1,step:0.01} ] },
+  grain:     { label:'GRAIN', tier:'frame',
+               ui:[ {k:'amount',label:'AMOUNT',min:0,max:0.4,step:0.005},
+                    {k:'size',label:'SIZE',min:1,max:4,step:0.5},
+                    {k:'mono',label:'MONO 0/1',min:0,max:1,step:1} ] },
+  glitch:    { label:'GLITCH', tier:'frame',
+               ui:[ {k:'amount',label:'AMOUNT',min:0,max:1,step:0.01},
+                    {k:'bands',label:'BANDS',min:4,max:64,step:1},
+                    {k:'rgb',label:'RGB SHIFT',min:0,max:2,step:0.05},
+                    {k:'speed',label:'SPEED',min:0,max:30,step:0.5} ] }
+};
+
+/* ---------- layer型ヘルパ: DOF ---------- */
+function dofBlurPx(z, p){
+  const d = Math.abs((z||0) - (p.focusZ||0));
+  const r = d / Math.max(1, p.range||400);
+  return Math.min(p.maxBlur||12, r * (p.maxBlur||12));
+}
+
+/* ---------- 本体 ---------- */
+function createSatsueiFX(opts){
+  opts = opts || {};
+  const cvs = document.createElement('canvas');
+  const glOpts = { premultipliedAlpha:false, preserveDrawingBuffer:true, antialias:false };
+  const gl = cvs.getContext('webgl', glOpts) || cvs.getContext('experimental-webgl', glOpts);
+  const api = { available: !!gl, canvas: cvs, defs: FX_DEFS, apply: null, destroy: null };
+  if(!gl){ api.apply = (src)=>src; api.destroy = ()=>{}; return api; }
+
+  const VERT = 'attribute vec2 aP;varying vec2 vUv;void main(){vUv=aP*0.5+0.5;gl_Position=vec4(aP,0.,1.);}';
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+
+  function compile(fsrc){
+    const p = gl.createProgram();
+    const mk = (type, src)=>{
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('[SatsueiFX] shader: '+gl.getShaderInfoLog(s)+'\n'+src);
+      gl.attachShader(p, s); return s;
+    };
+    mk(gl.VERTEX_SHADER, VERT); mk(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec2 vUv;'+fsrc);
+    gl.bindAttribLocation(p, 0, 'aP'); gl.linkProgram(p);
+    if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('[SatsueiFX] link: '+gl.getProgramInfoLog(p));
+    return p;
+  }
+
+  /* 座標系: アップロード時 UNPACK_FLIP_Y_WEBGL=true。y下向き計算は pd=vec2(vUv.x, 1.0-vUv.y) */
+  const FRAG = {
+    copy: 'uniform sampler2D uT;void main(){gl_FragColor=texture2D(uT,vUv);}',
+    bright: 'uniform sampler2D uT;uniform float uTh;\n'+
+      'void main(){vec3 c=texture2D(uT,vUv).rgb;float l=dot(c,vec3(.299,.587,.114));\n'+
+      'gl_FragColor=vec4(c*smoothstep(uTh,uTh+.25,l),1.);}',
+    blur: 'uniform sampler2D uT;uniform vec2 uDir;\n'+
+      'void main(){vec3 c=texture2D(uT,vUv).rgb*.2270270270;\n'+
+      'c+=texture2D(uT,vUv+uDir*1.3846153846).rgb*.3162162162;\n'+
+      'c+=texture2D(uT,vUv-uDir*1.3846153846).rgb*.3162162162;\n'+
+      'c+=texture2D(uT,vUv+uDir*3.2307692308).rgb*.0702702703;\n'+
+      'c+=texture2D(uT,vUv-uDir*3.2307692308).rgb*.0702702703;\n'+
+      'gl_FragColor=vec4(c,1.);}',
+    mixglow: 'uniform sampler2D uT;uniform sampler2D uG;uniform float uGain;uniform float uMode;\n'+
+      'void main(){vec3 b=texture2D(uT,vUv).rgb;vec3 g=texture2D(uG,vUv).rgb*uGain;\n'+
+      'vec3 scr=1.-(1.-b)*(1.-clamp(g,0.,1.));\n'+
+      'gl_FragColor=vec4(mix(scr,b+g,uMode),1.);}',
+    dirblur: 'uniform sampler2D uT;uniform vec2 uVel;\n'+
+      'void main(){vec3 c=vec3(0.);\n'+
+      'for(int i=0;i<8;i++){float t=(float(i)+.5)/8.-.5;c+=texture2D(uT,vUv+uVel*t).rgb;}\n'+
+      'gl_FragColor=vec4(c/8.,1.);}',
+    para: 'uniform sampler2D uT;uniform vec2 uDirG;uniform vec3 uC1;uniform vec3 uC2;\n'+
+      'uniform float uA1;uniform float uA2;uniform float uMid;uniform float uSoft;\n'+
+      'void main(){vec3 b=texture2D(uT,vUv).rgb;vec2 pd=vec2(vUv.x,1.-vUv.y);\n'+
+      'float t=dot(pd-.5,uDirG)+.5;float m=smoothstep(uMid-uSoft*.5,uMid+uSoft*.5,t);\n'+
+      'vec3 ov=mix(uC1,uC2,m);float a=mix(uA1,uA2,m);\n'+
+      'gl_FragColor=vec4(1.-(1.-b)*(1.-ov*a),1.);}',
+    grade: 'uniform sampler2D uT;uniform float uLift;uniform float uGamma;uniform float uGain;\n'+
+      'uniform float uSat;uniform float uTemp;\n'+
+      'void main(){vec3 c=texture2D(uT,vUv).rgb;\n'+
+      'c=pow(max(c*uGain+uLift,0.),vec3(1./uGamma));\n'+
+      'c.r+=uTemp*.08;c.b-=uTemp*.08;\n'+
+      'float l=dot(c,vec3(.299,.587,.114));c=mix(vec3(l),c,uSat);\n'+
+      'gl_FragColor=vec4(clamp(c,0.,1.),1.);}',
+    finish: 'uniform sampler2D uT;uniform vec2 uRes;uniform float uTime;\n'+
+      'uniform float uVigA;uniform float uVigS;uniform float uGrA;uniform float uGrS;uniform float uMono;\n'+
+      'float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7))+uTime*57.)*43758.5453);}\n'+
+      'void main(){vec3 c=texture2D(uT,vUv).rgb;\n'+
+      'float d=distance(vUv,vec2(.5))*1.41421356;\n'+
+      'c*=1.-uVigA*smoothstep(1.-uVigS,1.,d);\n'+
+      'vec2 gp=floor(vUv*uRes/max(uGrS,1.));\n'+
+      'vec3 n=vec3(h(gp),h(gp+7.1),h(gp+13.7))*2.-1.;\n'+
+      'n=mix(n,vec3(n.x),uMono);c+=n*uGrA;\n'+
+      'gl_FragColor=vec4(clamp(c,0.,1.),1.);}',
+    glitch: 'uniform sampler2D uT;uniform float uTime;uniform float uAmt;uniform float uBands;\n'+
+      'uniform float uRgb;uniform vec2 uRes;\n'+
+      'float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\n'+
+      'void main(){float band=floor(vUv.y*uBands);\n'+
+      'float r=h(vec2(band,floor(uTime)));\n'+
+      'float on=step(1.-uAmt*.35,r);\n'+
+      'float off=(h(vec2(band,floor(uTime)+.5))-.5)*.2*uAmt*on;\n'+
+      'vec2 uv=vec2(vUv.x+off,vUv.y);\n'+
+      'float sh=uRgb*2./uRes.x*(1.+on*6.);\n'+
+      'gl_FragColor=vec4(texture2D(uT,uv+vec2(sh,0.)).r,texture2D(uT,uv).g,texture2D(uT,uv-vec2(sh,0.)).b,1.);}'
+  };
+  const PROG = {}; for(const k in FRAG) PROG[k] = compile(FRAG[k]);
+  const U = (p,n)=>gl.getUniformLocation(p,n);
+
+  function makeTarget(w,h){
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    return { tex, fbo, w, h };
+  }
+  let W=0, H=0, srcTex=null, ping=null, pong=null, q1=null, q2=null;
+  function resize(w,h){
+    if(w===W && h===H) return;
+    W=w; H=h; cvs.width=w; cvs.height=h;
+    [ping,pong,q1,q2].forEach(t=>{ if(t){ gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } });
+    ping=makeTarget(w,h); pong=makeTarget(w,h);
+    const qw=Math.max(2,w>>2), qh=Math.max(2,h>>2);
+    q1=makeTarget(qw,qh); q2=makeTarget(qw,qh);
+    if(srcTex) gl.deleteTexture(srcTex);
+    srcTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+
+  function bindDraw(prog, srcT, target){
+    gl.useProgram(prog);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+    gl.viewport(0, 0, target?target.w:W, target?target.h:H);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcT);
+    gl.uniform1i(U(prog,'uT'), 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  const hex2rgb = s=>{ const n=parseInt(String(s).replace('#',''),16)||0;
+    return [ ((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255 ]; };
+
+  api.apply = function(src, fx, info){
+    if(!fx || !fx.enabled) return src;
+    const w = src.width, h = src.height;
+    resize(w, h);
+    info = info || {};
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    let cur = srcTex, curIsPing = false;
+    const next = ()=>{ curIsPing = !curIsPing; return curIsPing ? ping : pong; };
+    const active = (fx.chain||[]).filter(e=>e && e.on && FX_DEFS[e.t]);
+    (fx.chain||[]).forEach(e=>{ if(e && e.on && !FX_DEFS[e.t]) console.warn('[SatsueiFX] unknown effect:', e.t); });
+    for(const e of active){
+      const p = e.p || {};
+      let t;
+      switch(e.t){
+        case 'mb': {
+          const k = (p.rtStrength==null?1:p.rtStrength);
+          const vx=(info.velX||0)*k, vy=(info.velY||0)*k;
+          if(Math.abs(vx)<1e-5 && Math.abs(vy)<1e-5) break;
+          t = next(); gl.useProgram(PROG.dirblur);
+          gl.uniform2f(U(PROG.dirblur,'uVel'), vx, -vy);
+          bindDraw(PROG.dirblur, cur, t); cur = t.tex; break; }
+        case 'diffusion': {
+          gl.useProgram(PROG.bright);
+          gl.uniform1f(U(PROG.bright,'uTh'), p.threshold==null?0.55:p.threshold);
+          bindDraw(PROG.bright, cur, q1);
+          const rad = (p.radius==null?1:p.radius);
+          for(let i=0;i<2;i++){
+            gl.useProgram(PROG.blur);
+            gl.uniform2f(U(PROG.blur,'uDir'), rad*(i+1)/q1.w, 0);
+            bindDraw(PROG.blur, q1.tex, q2);
+            gl.useProgram(PROG.blur);
+            gl.uniform2f(U(PROG.blur,'uDir'), 0, rad*(i+1)/q1.h);
+            bindDraw(PROG.blur, q2.tex, q1);
+          }
+          t = next(); gl.useProgram(PROG.mixglow);
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, q1.tex);
+          gl.uniform1i(U(PROG.mixglow,'uG'), 1);
+          gl.uniform1f(U(PROG.mixglow,'uGain'), p.gain==null?0.8:p.gain);
+          gl.uniform1f(U(PROG.mixglow,'uMode'), p.mode||0);
+          gl.activeTexture(gl.TEXTURE0);
+          bindDraw(PROG.mixglow, cur, t); cur = t.tex; break; }
+        case 'para': {
+          t = next(); gl.useProgram(PROG.para);
+          const a=(p.angle||0)*Math.PI/180;
+          gl.uniform2f(U(PROG.para,'uDirG'), Math.cos(a), Math.sin(a));
+          gl.uniform3fv(U(PROG.para,'uC1'), hex2rgb(p.c1||'#ffc890'));
+          gl.uniform3fv(U(PROG.para,'uC2'), hex2rgb(p.c2||'#281866'));
+          gl.uniform1f(U(PROG.para,'uA1'), p.a1==null?0.3:p.a1);
+          gl.uniform1f(U(PROG.para,'uA2'), p.a2==null?0.25:p.a2);
+          gl.uniform1f(U(PROG.para,'uMid'), p.mid==null?0.5:p.mid);
+          gl.uniform1f(U(PROG.para,'uSoft'), Math.max(0.02,p.soft==null?0.45:p.soft));
+          bindDraw(PROG.para, cur, t); cur = t.tex; break; }
+        case 'grade': {
+          t = next(); gl.useProgram(PROG.grade);
+          gl.uniform1f(U(PROG.grade,'uLift'), p.lift||0);
+          gl.uniform1f(U(PROG.grade,'uGamma'), Math.max(0.05,p.gamma==null?1:p.gamma));
+          gl.uniform1f(U(PROG.grade,'uGain'), p.gain==null?1:p.gain);
+          gl.uniform1f(U(PROG.grade,'uSat'), p.sat==null?1:p.sat);
+          gl.uniform1f(U(PROG.grade,'uTemp'), p.temp||0);
+          bindDraw(PROG.grade, cur, t); cur = t.tex; break; }
+        case 'glitch': {
+          t = next(); gl.useProgram(PROG.glitch);
+          gl.uniform1f(U(PROG.glitch,'uTime'), (info.t||0)*(p.speed==null?8:p.speed));
+          gl.uniform1f(U(PROG.glitch,'uAmt'), p.amount==null?0.15:p.amount);
+          gl.uniform1f(U(PROG.glitch,'uBands'), Math.max(1,p.bands||24));
+          gl.uniform1f(U(PROG.glitch,'uRgb'), p.rgb==null?0.5:p.rgb);
+          gl.uniform2f(U(PROG.glitch,'uRes'), W, H);
+          bindDraw(PROG.glitch, cur, t); cur = t.tex; break; }
+      }
+    }
+    const vig = active.find(e=>e.t==='vignette'), grn = active.find(e=>e.t==='grain');
+    gl.useProgram(PROG.finish);
+    gl.uniform2f(U(PROG.finish,'uRes'), W, H);
+    gl.uniform1f(U(PROG.finish,'uTime'), (info.t||0)%97);
+    gl.uniform1f(U(PROG.finish,'uVigA'), vig ? (vig.p.amount==null?0.25:vig.p.amount) : 0);
+    gl.uniform1f(U(PROG.finish,'uVigS'), vig ? Math.max(0.05,vig.p.soft==null?0.55:vig.p.soft) : 0.5);
+    gl.uniform1f(U(PROG.finish,'uGrA'), grn ? (grn.p.amount==null?0.06:grn.p.amount) : 0);
+    gl.uniform1f(U(PROG.finish,'uGrS'), grn ? (grn.p.size||1.5) : 1.5);
+    gl.uniform1f(U(PROG.finish,'uMono'), grn ? (grn.p.mono==null?1:grn.p.mono) : 1);
+    bindDraw(PROG.finish, cur, null);
+    return cvs;
+  };
+
+  api.destroy = function(){
+    [ping,pong,q1,q2].forEach(t=>{ if(t){ gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } });
+    if(srcTex) gl.deleteTexture(srcTex);
+    for(const k in PROG) gl.deleteProgram(PROG[k]);
+    gl.deleteBuffer(buf);
+  };
+  return api;
+}
+
+if(typeof window !== 'undefined'){
+  window.SatsueiFX = { createSatsueiFX, makeDefaultFx, dofBlurPx, FX_DEFS };
+}
+/* ===== /SATSUEI FX CORE ===== */
+</script>
+
+<script>
+'use strict';
+/* ============================================================
+   CORE — SPEC_01 と同じ TAKE 文法（単一シーン・ワイプ無し版）
+   ============================================================ */
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const map=(v,a,b,c=0,d=1)=>c+(d-c)*clamp((v-a)/(b-a),0,1);
+const E={linear:t=>t,inout:t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,smooth:t=>t*t*(3-2*t),outCubic:t=>1-Math.pow(1-t,3),inCubic:t=>t*t*t};
+const pad=(n,l=2)=>String(n).padStart(l,'0');
+
+let VW=innerWidth,VH=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
+const cv=$('#cv');
+const cx0=cv.getContext('2d');
+let cx=cx0;                      // V2-C: PREVIEW+FX中はオフスクリーンへ差し替え
+function onResize(){VW=innerWidth;VH=innerHeight;DPR=Math.min(devicePixelRatio||1,2);cv.width=Math.round(VW*DPR);cv.height=Math.round(VH*DPR);if(bootedV2C)computeWipeP();}
+var bootedV2C=false;
+addEventListener('resize',onResize);onResize();
+
+/* ---------- V2-C: SATSUEI FX（SPEC_06 P2 — take.fx / draft in PREVIEW） ---------- */
+const SFX=(typeof window!=='undefined'&&window.SatsueiFX)||null;
+let gFx=null,gSc=null,gScx=null;
+function gFxOK(){
+  if(!SFX)return false;
+  if(!gFx)gFx=SFX.createSatsueiFX();
+  return gFx.available;
+}
+function ensureSc(w,h){
+  if(!gSc){gSc=document.createElement('canvas');gScx=gSc.getContext('2d');}
+  if(gSc.width!==w||gSc.height!==h){gSc.width=w;gSc.height=h;}
+}
+
+/* ---------- project ---------- */
+let PROJECT={version:2,name:'oban',panels:[],frames:[],take:{version:1,name:'take-A',kf:[]}};
+const IMGCACHE={};   // fileName -> {img, ar}
+let pid=1;
+/* V1→V2マイグレーション: 欠損フィールドを既定値補完 (SPEC_05) */
+function migrate(p){
+  p.version=2;
+  if(!Array.isArray(p.panels))p.panels=[];
+  if(!Array.isArray(p.frames))p.frames=[];
+  p.panels.forEach((pp,i)=>{
+    if(pp.ord===undefined)pp.ord=i;
+    if(pp.parent===undefined)pp.parent=null;
+    if(pp.seq===undefined)pp.seq=null;
+  });
+  p.frames.forEach((f,i)=>{
+    if(f.ord===undefined)f.ord=i;
+    if(!f.quad)f.quad=[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
+    if(f.par===undefined)f.par=0.6;
+    if(!f.fx)f.fx={in:'none',drift:'none',amt:0.12,kf:null};   // V2-C: IN演出/ドリフト
+    if(f.wipe===undefined)f.wipe=null;                          // V2-C: カバーワイプ
+  });
+  if(!p.take)p.take={version:1,name:'take-A',kf:[]};
+  if(!p.take.fx)p.take.fx=(typeof window!=='undefined'&&window.SatsueiFX)   // SPEC_06: fxスキーマv1
+    ?window.SatsueiFX.makeDefaultFx():{version:1,enabled:false,chain:[]};
+  return p;
+}
+/* ---------- V2-B: 参照ヘルパ ---------- */
+const isFrame=o=>!!(o&&o.quad);
+const rootItems=()=>[...PROJECT.panels.filter(p=>!p.parent),...PROJECT.frames];
+const childrenOf=f=>PROJECT.panels.filter(p=>p.parent===f.id);
+const frameById=id=>PROJECT.frames.find(f=>f.id===id);
+const bySort=(a,b)=>((a.depth??0.5)-(b.depth??0.5))||((a.ord??0)-(b.ord??0));
+/* ---------- V2-B: シーケンス再生 ---------- */
+const seqFile=(s,i)=>s.pre+String(s.start+i).padStart(s.pad,'0')+'.'+s.ext;
+function seqIdx(p,tS,vis){
+  const s=p.seq;
+  const wave=t=>{
+    const f=Math.floor(t*s.fps);
+    if(s.mode==='pingpong'){const m=Math.max(2*s.n-2,1);const k=f%m;return k<s.n?k:m-k;}
+    return f%s.n;
+  };
+  if(s.trigger==='enter'){
+    if(vis<=0){p._t0=null;return 0;}                 // 画面外に出たらリセット→再入場で再演
+    if(p._t0==null&&vis>=0.3)p._t0=tS;               // 30%入った瞬間に開始
+    if(p._t0==null)return 0;
+    const t=tS-p._t0;
+    return s.mode==='once'?Math.min(Math.floor(t*s.fps),s.n-1):wave(t);
+  }
+  return s.mode==='once'?Math.min(Math.floor(tS*s.fps),s.n-1):wave(tS);
+}
+function panelImg(p,tS,vis){
+  if(!p.seq){const c=IMGCACHE[p.name];return c&&c.img;}
+  const i=clamp(seqIdx(p,tS,vis),0,p.seq.n-1);
+  const c=IMGCACHE[seqFile(p.seq,i)];return c&&c.img;
+}
+
+function buildTake(take){
+  const kf=(take.kf&&take.kf.length)?take.kf:[{x:0,y:0,z:1,dwell:1,ease:'smooth'}];
+  const tw=d=>clamp(d,0.25,2.2);
+  const segs=[];
+  for(let i=0;i<kf.length;i++){
+    segs.push({t:'dwell',a:kf[i],b:kf[i],w:Math.max(0.05,kf[i].dwell??1)});
+    if(i<kf.length-1){
+      const A=kf[i],B=kf[i+1];
+      segs.push({t:'travel',a:A,b:B,ease:B.ease??'smooth',
+        w:tw(Math.hypot(B.x-A.x,B.y-A.y)+Math.abs((B.z??1)-(A.z??1)))});
+    }
+  }
+  const total=segs.reduce((s,x)=>s+x.w,0);
+  let acc=0;for(const s of segs){s.p0=acc/total;acc+=s.w;s.p1=acc/total;}
+  return {segs,total};
+}
+let TT=buildTake(PROJECT.take);
+function camAt(P){
+  let seg=TT.segs[TT.segs.length-1];
+  for(const s of TT.segs){if(P<=s.p1){seg=s;break;}}
+  const f=map(P,seg.p0,seg.p1);
+  if(seg.t==='travel'){
+    const e=(E[seg.ease]||E.smooth)(f);
+    return{x:lerp(seg.a.x,seg.b.x,e),y:lerp(seg.a.y,seg.b.y,e),z:clamp(lerp(seg.a.z??1,seg.b.z??1,e),0.25,4)};
+  }
+  return{x:seg.a.x,y:seg.a.y,z:clamp(seg.a.z??1,0.25,4)};
+}
+
+/* ---------- state ---------- */
+let mode='place';                          // 'place' | 'take'
+const VC={x:0,y:0,z:0.8};                  // view/edit camera
+let sel=null,drag=null,selKf=-1;
+const PV={on:false,p:0};
+let toastT=0;
+let guides=true;                           // V2-A: ガイド表示（G）
+try{guides=(localStorage.getItem('oban-guides')??'1')==='1';}catch(e){}
+
+/* ---------- persistence (localStorage / 画像はファイル名参照) ---------- */
+function save(){
+  try{localStorage.setItem('oban-project',JSON.stringify(PROJECT));}catch(e){}
+}
+function load(){
+  try{
+    const j=localStorage.getItem('oban-project');
+    if(!j)return;
+    const p=JSON.parse(j);
+    if(p&&Array.isArray(p.panels)){PROJECT=migrate(p);TT=buildTake(PROJECT.take);
+      if(PROJECT.panels.length)toast('前回のプロジェクトを復元 — 画像を再ドロップすると絵が戻ります');}
+  }catch(e){}
+}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.style.display='block';toastT=4;}
+
+/* ---------- panels ---------- */
+function loadImg(f){
+  const url=URL.createObjectURL(f);
+  const img=new Image();
+  img.onload=()=>{
+    IMGCACHE[f.name]={img,ar:img.naturalWidth/img.naturalHeight};
+    for(const p of PROJECT.panels){   // ar補完（単品/シーケンス先頭）
+      if(p.name===f.name||(p.seq&&f.name===seqFile(p.seq,0)))p.ar=img.naturalWidth/img.naturalHeight;
+    }
+    save();
+  };
+  img.src=url;
+}
+function pushPanel(name,seq){
+  const roots=PROJECT.panels.filter(p=>!p.parent);
+  const maxY=roots.reduce((m,p)=>Math.max(m,p.y),-1.1);
+  const maxOrd=rootItems().reduce((m,p)=>Math.max(m,p.ord??0),-1);
+  PROJECT.panels.push({id:pid++,name,x:0,y:+(maxY+1.1).toFixed(3),h:0.82,depth:0.5,ord:maxOrd+1,ar:1.414,parent:null,seq});
+}
+function addFiles(files){
+  const imgs=[...files].filter(f=>f.type&&f.type.startsWith('image/'));
+  const re=/^(.*?)(\d{3,5})\.(png|webp|jpe?g)$/i;
+  const groups={},singles=[];
+  for(const f of imgs){
+    const m=f.name.match(re);
+    if(m){const k=m[1]+'|'+m[3].toLowerCase();(groups[k]??(groups[k]=[])).push({f,num:+m[2],pad:m[2].length,pre:m[1],ext:m[3]});}
+    else singles.push(f);
+  }
+  let added=0;
+  for(const key of Object.keys(groups)){
+    const g=groups[key].sort((a,b)=>a.num-b.num);
+    if(g.length>=4){   // V2-B: 連番4枚以上→1つのシーケンスパネル
+      for(const it of g)loadImg(it.f);
+      const nm=g[0].pre+'*.'+g[0].ext;
+      if(!PROJECT.panels.find(p=>p.name===nm)){
+        pushPanel(nm,{pre:g[0].pre,pad:g[0].pad,start:g[0].num,n:g.length,ext:g[0].ext,fps:12,mode:'loop',trigger:'always'});
+        added++;
+        toast(`${g[0].pre} を ${g.length}枚のシーケンスとして追加（loop 12fps — チップで変更）`);
+      }
+    }else singles.push(...g.map(x=>x.f));
+  }
+  for(const f of singles){
+    loadImg(f);
+    if(!PROJECT.panels.find(p=>p.name===f.name)){pushPanel(f.name,null);added++;}
+  }
+  if(imgs.length){$('#drop').classList.add('hide');if(added)commit();}
+}
+addEventListener('dragover',e=>{e.preventDefault();document.body.classList.add('dragover');});
+addEventListener('dragleave',()=>document.body.classList.remove('dragover'));
+addEventListener('drop',e=>{
+  e.preventDefault();document.body.classList.remove('dragover');
+  if(e.dataTransfer&&e.dataTransfer.files)addFiles([...e.dataTransfer.files]);
+});
+
+/* panel screen rect (multiplane) */
+function prect(p,cam){
+  const W=cv.width,H=cv.height;
+  const eff=p.depth??0.5;
+  const pf=lerp(0.7,1.2,eff);                       // パンのパララックス係数
+  const zi=1+(cam.z-1)*lerp(0.55,1.25,eff);         // ズームのマルチプレーン係数
+  const th=p.h*H*zi,tw=th*(p.ar||1.414);
+  const x=W/2+(p.x-cam.x*pf)*W*zi-tw/2;
+  const y=H/2+(p.y-cam.y*pf)*H*zi-th/2;
+  return{x,y,w:tw,h:th,zi};
+}
+
+/* ---------- drawing ---------- */
+function grid(cam){
+  const W=cv.width,H=cv.height,gap=H*0.55*cam.z;
+  cx.save();cx.globalAlpha=0.08;cx.strokeStyle='#9f8fd0';cx.lineWidth=1;
+  const ox=(W/2-cam.x*W*cam.z)%gap,oy=(H/2-cam.y*H*cam.z)%gap;
+  for(let x=ox-gap;x<W+gap;x+=gap){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=oy-gap;y<H+gap;y+=gap){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  cx.restore();
+}
+/* ---------- V2-B: フレーム内の子パネル矩形（内部パララックス） ---------- */
+function childRect(c,f,R,cam){
+  const lx=(cam.x-f.x)*(f.par??0.6), ly=(cam.y-f.y)*(f.par??0.6);   // ローカルカメラ
+  const k=lerp(0.15,0.85,1-(c.depth??0.5));                          // 奥ほど動かない
+  const th=c.h*R.h, tw=th*(c.ar||1.414);
+  return{x:R.x+R.w/2+(c.x-lx*k)*R.h-tw/2, y:R.y+R.h/2+(c.y-ly*k)*R.h-th/2, w:tw, h:th};
+}
+function quadPath(f,R){
+  cx.beginPath();
+  f.quad.forEach((q,i)=>{const px=R.x+q.x*R.w,py=R.y+q.y*R.h;i?cx.lineTo(px,py):cx.moveTo(px,py);});
+  cx.closePath();
+}
+function visFrac(r){
+  const W=cv.width,H=cv.height;
+  const ix=Math.max(0,Math.min(r.x+r.w,W)-Math.max(r.x,0));
+  const iy=Math.max(0,Math.min(r.y+r.h,H)-Math.max(r.y,0));
+  return (ix*iy)/Math.max(r.w*r.h,1);
+}
+function drawImgPanel(p,r,tS,dim){
+  const img=panelImg(p,tS,visFrac(r));
+  cx.save();
+  if(dim)cx.globalAlpha=0.35;
+  if(img&&img.complete&&img.naturalWidth)cx.drawImage(img,r.x,r.y,r.w,r.h);
+  else{
+    cx.strokeStyle='rgba(242,238,252,.4)';cx.setLineDash([6,6]);
+    cx.strokeRect(r.x,r.y,r.w,r.h);cx.setLineDash([]);
+    cx.fillStyle='rgba(242,238,252,.5)';cx.font=`${12*DPR}px monospace`;
+    cx.fillText(p.name+'（画像を再ドロップ）',r.x+10,r.y+22*DPR);
+  }
+  cx.restore();
+}
+/* ---------- V2-C: FRAMEのIN演出・ドリフト・カバーワイプ ----------
+ * fx.kf のKFに紐づく: 直前travel区間=IN演出の窓 / dwell区間=ドリフトの窓（Pの純関数=可逆）
+ * builderのTAKEは単一シーンなので TT.segs = [dwell0,travel01,dwell1,...] → kf i の
+ * dwell=segs[2i] / 直前travel=segs[2i-1] */
+function frameKfIdx(f){
+  if(f.fx&&f.fx.kf!=null&&PROJECT.take.kf[f.fx.kf])return f.fx.kf;
+  let bi=null,bd=1e9;   // auto: フレーム中心に最も近いKF
+  PROJECT.take.kf.forEach((k,i)=>{const d=Math.hypot(k.x-f.x,k.y-f.y);if(d<bd){bd=d;bi=i;}});
+  return bi;
+}
+function frameFxAt(f,P){
+  const r={dx:0,dy:0,s:1};
+  if(P==null||!f.fx)return r;
+  const ki=frameKfIdx(f);if(ki==null)return r;
+  const dSeg=TT.segs[2*ki],tSeg=(2*ki-1>=0)?TT.segs[2*ki-1]:null;
+  if(f.fx.in&&f.fx.in!=='none'&&tSeg){
+    const off=1-E.smooth(map(P,tSeg.p0,tSeg.p1));
+    const D=1.3*off;
+    if(f.fx.in==='slide-l')r.dx=-D;else if(f.fx.in==='slide-r')r.dx=D;
+    else if(f.fx.in==='slide-t')r.dy=-D;else if(f.fx.in==='slide-b')r.dy=D;
+  }
+  if(f.fx.drift&&f.fx.drift!=='none'&&dSeg){
+    const g=E.smooth(map(P,dSeg.p0,dSeg.p1));
+    const amt=f.fx.amt??0.12;
+    r.s=f.fx.drift==='push-in'?1+amt*g:1+amt*(1-g);
+  }
+  return r;
+}
+function applyFxRect(R,o,P,W,H){
+  if(!isFrame(o)||P==null)return R;
+  const k=frameFxAt(o,P);
+  if(k.dx===0&&k.dy===0&&k.s===1)return R;
+  const cxp=R.x+R.w/2+k.dx*W, cyp=R.y+R.h/2+k.dy*H;
+  return{x:cxp-R.w*k.s/2,y:cyp-R.h*k.s/2,w:R.w*k.s,h:R.h*k.s,zi:R.zi};
+}
+/* カバーワイプ: 全Pを400サンプルして「フレームが画面を100%覆う最小P」を事前計算（決定的・可逆） */
+function computeWipeP(){
+  const W=cv.width,H=cv.height;
+  for(const f of PROJECT.frames){
+    f._wipeP=null;
+    if(!f.wipe)continue;
+    for(let s=0;s<=400;s++){
+      const P=s/400,cam=camAt(P);
+      let R=prect(f,cam);R=applyFxRect(R,f,P,W,H);
+      if(R.x<=0&&R.y<=0&&R.x+R.w>=W&&R.y+R.h>=H){f._wipeP=P;break;}
+    }
+  }
+}
+/* ワイプの見た目: invert=ステージ全体を明暗反転 / whiteout=覆った瞬間から白→次の絵 */
+function applyWipeVisual(P){
+  let inv=false,wa=0;
+  if(P!=null)for(const f of PROJECT.frames){
+    if(!f.wipe||f._wipeP==null)continue;
+    if(f.wipe==='invert'&&P>=f._wipeP)inv=true;
+    else if(f.wipe==='whiteout'){
+      const a=map(P,f._wipeP-0.01,f._wipeP)*(1-map(P,f._wipeP,f._wipeP+0.06));
+      wa=Math.max(wa,a);
+    }
+  }
+  cv.style.filter=inv?'invert(1) hue-rotate(180deg)':'';
+  if(wa>0.01){cx0.save();cx0.globalAlpha=wa;cx0.fillStyle='#fff';cx0.fillRect(0,0,cv.width,cv.height);cx0.restore();}
+}
+
+const maskEdit={on:false,f:null};
+function drawMaskHandles(f,R){
+  cx.save();cx.fillStyle='#FF4FA8';cx.strokeStyle='#FF4FA8';cx.lineWidth=1*DPR;
+  quadPath(f,R);cx.stroke();
+  f.quad.forEach(q=>{
+    const px=R.x+q.x*R.w,py=R.y+q.y*R.h;
+    cx.fillRect(px-5*DPR,py-5*DPR,10*DPR,10*DPR);
+  });
+  cx.restore();
+}
+function renderWorld(cam,tS,P){
+  const items=rootItems().sort(bySort);
+  for(const o of items){
+    let R=prect(o,cam);
+    R=applyFxRect(R,o,P,cv.width,cv.height);   // V2-C: IN演出/ドリフト（PREVIEW時のみP非null）
+    if(R.x>cv.width+R.w||R.x+R.w<-R.w||R.y>cv.height+R.h||R.y+R.h<-R.h)continue;
+    const dim=!!(ctxFrame&&o!==ctxFrame);   // フレーム内編集中は他を減光
+    if(isFrame(o)){
+      cx.save();
+      quadPath(o,R);cx.clip();
+      if(dim)cx.globalAlpha=0.35;
+      for(const c of childrenOf(o).sort(bySort)){
+        const r=childRect(c,o,R,cam);
+        drawImgPanel(c,r,tS,false);
+        if(mode==='place'&&sel===c){cx.strokeStyle='#FF4FA8';cx.lineWidth=2*DPR;cx.strokeRect(r.x,r.y,r.w,r.h);}
+      }
+      cx.restore();
+      /* 枠線（ビルダーのみ・書き出さない） */
+      cx.save();cx.globalAlpha=dim?0.25:(sel===o?0.95:0.45);
+      cx.strokeStyle=sel===o?'#FF4FA8':'rgba(242,238,252,.55)';cx.lineWidth=(sel===o?2:1)*DPR;
+      quadPath(o,R);cx.stroke();
+      cx.fillStyle='rgba(242,238,252,.6)';cx.font=`${9*DPR}px monospace`;
+      const badges=[o.fx&&o.fx.in!=='none'?o.fx.in:'',o.fx&&o.fx.drift!=='none'?o.fx.drift:'',o.wipe?'WIPE:'+o.wipe:''].filter(Boolean).join(' ');
+      cx.fillText(o.name+(badges?' ['+badges+']':''),R.x+4*DPR,R.y-6*DPR);
+      cx.restore();
+      if(maskEdit.on&&maskEdit.f===o)drawMaskHandles(o,R);
+    }else{
+      drawImgPanel(o,R,tS,dim);
+      if(mode==='place'&&sel===o){cx.save();cx.strokeStyle='#FF4FA8';cx.lineWidth=2*DPR;cx.strokeRect(R.x,R.y,R.w,R.h);cx.restore();}
+    }
+  }
+}
+function drawTakePath(cam){
+  if(mode!=='take')return;
+  const kf=PROJECT.take.kf;if(!kf.length)return;
+  const W=cv.width,H=cv.height;
+  cx.save();cx.strokeStyle='#5AE9FF';cx.fillStyle='#5AE9FF';cx.lineWidth=1.5*DPR;cx.globalAlpha=0.8;
+  cx.beginPath();
+  kf.forEach((k,i)=>{
+    const x=W/2+(k.x-cam.x)*W*cam.z, y=H/2+(k.y-cam.y)*H*cam.z;
+    i?cx.lineTo(x,y):cx.moveTo(x,y);
+  });
+  cx.stroke();
+  cx.font=`${10*DPR}px monospace`;
+  kf.forEach((k,i)=>{
+    const x=W/2+(k.x-cam.x)*W*cam.z, y=H/2+(k.y-cam.y)*H*cam.z;
+    cx.beginPath();cx.arc(x,y,4*DPR,0,7);cx.fill();
+    if(i===selKf){  // V2-A: フォーカス=二重リング+dwell帯
+      cx.beginPath();cx.arc(x,y,9*DPR,0,7);cx.stroke();
+      cx.beginPath();cx.arc(x,y,13*DPR,0,7);cx.globalAlpha=0.4;cx.stroke();cx.globalAlpha=0.8;
+      cx.fillRect(x-15*DPR,y+16*DPR,(k.dwell??1)*12*DPR,2*DPR);
+    }
+    cx.fillText('#'+pad(i)+' z'+(k.z??1).toFixed(1),x+8*DPR,y-8*DPR);
+  });
+  /* V2-C: ワイプ発火点◇（ガイドON時） */
+  if(guides)for(const f of PROJECT.frames){
+    if(f._wipeP==null)continue;
+    const c2=camAt(f._wipeP);
+    const x=W/2+(c2.x-cam.x)*W*cam.z,y=H/2+(c2.y-cam.y)*H*cam.z;
+    cx.strokeStyle='#FFC94F';cx.beginPath();
+    cx.moveTo(x,y-8*DPR);cx.lineTo(x+8*DPR,y);cx.lineTo(x,y+8*DPR);cx.lineTo(x-8*DPR,y);
+    cx.closePath();cx.stroke();
+    cx.fillStyle='#FFC94F';cx.fillText(f.wipe,x+10*DPR,y+3*DPR);
+    cx.fillStyle='#5AE9FF';cx.strokeStyle='#5AE9FF';
+  }
+  cx.restore();
+}
+
+/* ---------- V2-A: ガイド（16:9セーフ+中央十字+三分割、Gで切替・書き出さない） ---------- */
+function drawGuides(){
+  if(!guides)return;
+  const W=cv.width,H=cv.height,ar=16/9;
+  let aw=W,ah=W/ar;if(ah>H){ah=H;aw=H*ar;}
+  const ax=(W-aw)/2,ay=(H-ah)/2;
+  cx.save();cx.strokeStyle='rgba(242,238,252,.5)';cx.fillStyle='rgba(242,238,252,.5)';
+  cx.lineWidth=1;cx.font=`${8*DPR}px monospace`;
+  cx.globalAlpha=.3;cx.strokeRect(ax,ay,aw,ah);cx.globalAlpha=1;   // 16:9枠
+  for(const[k,lab]of[[0.93,'ACTION 93%'],[0.90,'TITLE 90%']]){
+    const w2=aw*k,h2=ah*k,x=(W-w2)/2,y=(H-h2)/2;
+    cx.strokeRect(x,y,w2,h2);cx.fillText(lab,x+6*DPR,y+11*DPR);
+  }
+  cx.beginPath();   // 中央十字
+  cx.moveTo(W/2-14*DPR,H/2);cx.lineTo(W/2+14*DPR,H/2);
+  cx.moveTo(W/2,H/2-14*DPR);cx.lineTo(W/2,H/2+14*DPR);cx.stroke();
+  cx.globalAlpha=.16;cx.beginPath();   // 三分割（薄く）
+  for(const t of[1/3,2/3]){
+    cx.moveTo(ax+aw*t,ay);cx.lineTo(ax+aw*t,ay+ah);
+    cx.moveTo(ax,ay+ah*t);cx.lineTo(ax+aw,ay+ah*t);
+  }
+  cx.stroke();cx.restore();
+}
+function toggleGuides(){guides=!guides;try{localStorage.setItem('oban-guides',guides?'1':'0')}catch(e){}}
+
+/* ---------- cards (TAKE) ---------- */
+const cards=$('#cards');
+function renderCards(){
+  cards.innerHTML=`<div style="color:var(--ice);letter-spacing:.3em;margin-bottom:8px">TAKE — ${PROJECT.take.kf.length} KF ${selKf>=0?`/ SEL #${pad(selKf)}`:''}</div>`+
+    PROJECT.take.kf.map((k,i)=>`
+    <div class="edc${i===selKf?' sel':''}" data-i="${i}">
+      <div class="edc-h">#${pad(i)} <b>x${(+k.x).toFixed(2)} y${(+k.y).toFixed(2)} z${(+(k.z??1)).toFixed(2)}</b>
+        <button class="edb" data-i="${i}" data-act="go">▸GO</button><button class="edb" data-i="${i}" data-act="upd">↻UPD</button><button class="edb" data-i="${i}" data-act="del">✕</button>
+      </div>
+      <label>EASE <select data-i="${i}" data-act="ease">
+        ${['smooth','inout','linear','outCubic','inCubic'].map(e=>`<option value="${e}"${(k.ease||'smooth')===e?' selected':''}>${e}</option>`).join('')}
+      </select></label>
+      <label>DWELL <input type="range" data-i="${i}" data-act="dwell" min="0.05" max="3" step="0.05" value="${k.dwell??1}"> ${(k.dwell??1).toFixed(2)}</label>
+    </div>`).join('');
+}
+/* ---------- V2-A: undo/redoスタック（60段・スライダーは300ms合体） ---------- */
+let history=[],hIdx=-1,histT=null;
+function commit(){
+  clearTimeout(histT);histT=null;save();
+  const j=JSON.stringify(PROJECT);
+  if(history[hIdx]===j)return;
+  history=history.slice(0,hIdx+1);history.push(j);
+  if(history.length>60){history.shift();}
+  hIdx=history.length-1;
+}
+function commitD(){save();clearTimeout(histT);histT=setTimeout(commit,300);}
+function restoreState(j){
+  PROJECT=migrate(JSON.parse(j));
+  TT=buildTake(PROJECT.take);
+  sel=null;selKf=Math.min(selKf,PROJECT.take.kf.length-1);
+  renderCards();renderChip();save();
+}
+function undo(){if(hIdx>0){hIdx--;restoreState(history[hIdx]);toast('UNDO '+(hIdx+1)+'/'+history.length);}}
+function redo(){if(hIdx<history.length-1){hIdx++;restoreState(history[hIdx]);toast('REDO '+(hIdx+1)+'/'+history.length);}}
+function rebuild(){TT=buildTake(PROJECT.take);computeWipeP();renderCards();commit();}
+
+/* ---------- V2-A: z-order（depth=視差 / ord=重なり を分離） ---------- */
+function reorder(o,dir){
+  o.ord=(o.ord??0)+dir*1.5;
+  const list=o.parent?childrenOf(frameById(o.parent)):rootItems();   // V2-B: 兄弟の中で正規化
+  [...list].sort((a,b)=>(a.ord??0)-(b.ord??0)).forEach((x,i)=>x.ord=i);
+  commit();
+}
+
+/* ---------- V2-A: KFフォーカス（↑↓で行き来） ---------- */
+function selectKf(i,go=true){
+  const n=PROJECT.take.kf.length;
+  if(!n){selKf=-1;renderCards();return;}
+  selKf=clamp(i,0,n-1);
+  const k=PROJECT.take.kf[selKf];
+  if(go){VC.x=k.x;VC.y=k.y;VC.z=k.z??1;}
+  renderCards();
+  const el=cards.querySelector?cards.querySelector(`.edc[data-i="${selKf}"]`):null;
+  if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
+}
+function capture(){
+  PROJECT.take.kf.push({x:+VC.x.toFixed(3),y:+VC.y.toFixed(3),z:+VC.z.toFixed(3),dwell:1,ease:'smooth'});
+  selKf=PROJECT.take.kf.length-1;
+  rebuild();
+}
+cards.addEventListener('click',e=>{
+  const t=e.target;if(!t||!t.dataset)return;
+  if(t.dataset.act===undefined){                      // V2-A: カードクリック=フォーカス（カメラは動かさない）
+    const c=t.closest?t.closest('.edc'):null;
+    if(c&&c.dataset&&c.dataset.i!==undefined)selectKf(+c.dataset.i,false);
+    return;
+  }
+  const i=+t.dataset.i,k=PROJECT.take.kf[i];if(!k)return;
+  if(t.dataset.act==='go')selectKf(i,true);
+  else if(t.dataset.act==='upd'){Object.assign(k,{x:+VC.x.toFixed(3),y:+VC.y.toFixed(3),z:+VC.z.toFixed(3)});selKf=i;rebuild();}
+  else if(t.dataset.act==='del'){PROJECT.take.kf.splice(i,1);if(selKf>=PROJECT.take.kf.length)selKf=PROJECT.take.kf.length-1;rebuild();}
+});
+cards.addEventListener('input',e=>{
+  const t=e.target;if(!t||!t.dataset)return;
+  const i=+t.dataset.i,k=PROJECT.take.kf[i];if(!k)return;
+  if(t.dataset.act==='dwell'){k.dwell=parseFloat(t.value)||1;TT=buildTake(PROJECT.take);commitD();}
+  else if(t.dataset.act==='ease'){k.ease=t.value;TT=buildTake(PROJECT.take);commitD();}
+});
+cards.addEventListener('change',e=>{
+  const t=e.target;if(t&&t.dataset&&t.dataset.act==='dwell')renderCards();
+});
+
+/* ---------- chip (PLACE) — V2-B: 選択対象に応じて動的生成 ---------- */
+const chip=$('#chip');
+function renderChip(){
+  chip.classList.toggle('sel',!!sel);
+  if(!sel){chip.innerHTML='';return;}
+  const o=sel;
+  let s=`<span class="nm">${o.name}</span>
+   ORDER <button class="btn" data-act="back">◀</button><button class="btn" data-act="front">▶</button>
+   SIZE <button class="btn" data-act="minus">−</button><button class="btn" data-act="plus">＋</button>
+   DEPTH <input type="range" data-act="depth" min="0" max="1" step="0.05" value="${o.depth??0.5}"><span id="chip-dv">${(o.depth??0.5).toFixed(2)}</span>`;
+  if(isFrame(o)){
+    s+=` PAR <input type="range" data-act="par" min="0" max="1" step="0.05" value="${o.par??0.6}">
+   <button class="btn" data-act="mask">MASK [M]${maskEdit.on&&maskEdit.f===o?' ●':''}</button>`;
+    const fx=o.fx||{in:'none',drift:'none',amt:0.12,kf:null};
+    s+=`<br>IN <select data-act="fin">${['none','slide-l','slide-r','slide-t','slide-b'].map(m=>`<option${fx.in===m?' selected':''}>${m}</option>`).join('')}</select>
+     DRIFT <select data-act="fdrift">${['none','push-in','pull-out'].map(m=>`<option${fx.drift===m?' selected':''}>${m}</option>`).join('')}</select>
+     AMT <input type="range" data-act="famt" min="0" max="0.4" step="0.01" value="${fx.amt??0.12}">
+     KF <select data-act="fkf"><option value="">auto#${frameKfIdx(o)??'-'}</option>${PROJECT.take.kf.map((k,i)=>`<option value="${i}"${fx.kf===i?' selected':''}>#${pad(i)}</option>`).join('')}</select>
+     WIPE <select data-act="fwipe">${['none','invert','whiteout'].map(m=>`<option${(o.wipe||'none')===m?' selected':''}>${m}</option>`).join('')}</select>`;
+  }
+  if(o.seq)s+=`<br>SEQ ${o.seq.n}f
+   MODE <select data-act="mode">${['loop','once','pingpong'].map(m=>`<option${o.seq.mode===m?' selected':''}>${m}</option>`).join('')}</select>
+   FPS <input type="range" data-act="fps" min="4" max="30" step="1" value="${o.seq.fps}"><span id="chip-fps">${o.seq.fps}</span>
+   TRIGGER <select data-act="trigger">${['always','enter'].map(m=>`<option${o.seq.trigger===m?' selected':''}>${m}</option>`).join('')}</select>`;
+  if(o.parent)s+=` <button class="btn" data-act="eject">EJECT</button>`;
+  s+=` <button class="btn" data-act="del">DELETE</button>`;
+  chip.innerHTML=s;
+}
+function ejectPanel(p){
+  const f=frameById(p.parent);if(!f)return;
+  p.x=+(f.x+p.x*f.h).toFixed(3);p.y=+(f.y+p.y*f.h).toFixed(3);p.h=+(p.h*f.h).toFixed(3);
+  p.parent=null;toast(p.name+' をルートへ戻しました');renderChip();commit();
+}
+function deleteSel(){
+  if(!sel)return;
+  if(isFrame(sel)){
+    childrenOf(sel).forEach(c=>{const f=sel;c.x=+(f.x+c.x*f.h).toFixed(3);c.y=+(f.y+c.y*f.h).toFixed(3);c.h=+(c.h*f.h).toFixed(3);c.parent=null;});
+    PROJECT.frames=PROJECT.frames.filter(f=>f!==sel);
+    if(ctxFrame===sel)exitFrame();
+  }else PROJECT.panels=PROJECT.panels.filter(p=>p!==sel);
+  sel=null;maskEdit.on=false;renderChip();commit();
+}
+function toggleMask(){
+  if(!sel||!isFrame(sel)){maskEdit.on=false;maskEdit.f=null;return;}
+  maskEdit.on=!maskEdit.on;maskEdit.f=maskEdit.on?sel:null;renderChip();
+}
+chip.addEventListener('click',e=>{
+  const t=e.target,act=t&&t.dataset&&t.dataset.act;if(!act||!sel)return;
+  if(act==='back')reorder(sel,-1);
+  else if(act==='front')reorder(sel,+1);
+  else if(act==='minus'){sel.h=clamp(sel.h*0.88,0.05,4);commitD();}
+  else if(act==='plus'){sel.h=clamp(sel.h*1.14,0.05,4);commitD();}
+  else if(act==='mask')toggleMask();
+  else if(act==='eject')ejectPanel(sel);
+  else if(act==='del')deleteSel();
+});
+chip.addEventListener('input',e=>{
+  const t=e.target,act=t&&t.dataset&&t.dataset.act;if(!act||!sel)return;
+  if(act==='depth'){sel.depth=parseFloat(t.value);const d=$('#chip-dv');if(d)d.textContent=sel.depth.toFixed(2);commitD();}
+  else if(act==='par'&&isFrame(sel)){sel.par=parseFloat(t.value);commitD();}
+  else if(act==='fps'&&sel.seq){sel.seq.fps=parseInt(t.value)||12;const d=$('#chip-fps');if(d)d.textContent=sel.seq.fps;commitD();}
+  else if(act==='famt'&&isFrame(sel)){sel.fx.amt=parseFloat(t.value);computeWipeP();commitD();}   // V2-C
+});
+chip.addEventListener('change',e=>{
+  const t=e.target,act=t&&t.dataset&&t.dataset.act;if(!act||!sel)return;
+  if(sel.seq&&act==='mode'){sel.seq.mode=t.value;sel._t0=null;commit();}
+  else if(sel.seq&&act==='trigger'){sel.seq.trigger=t.value;sel._t0=null;commit();}
+  else if(isFrame(sel)&&act==='fin'){sel.fx.in=t.value;computeWipeP();commit();}                   // V2-C
+  else if(isFrame(sel)&&act==='fdrift'){sel.fx.drift=t.value;computeWipeP();commit();}
+  else if(isFrame(sel)&&act==='fkf'){sel.fx.kf=t.value===''?null:+t.value;computeWipeP();commit();renderChip();}
+  else if(isFrame(sel)&&act==='fwipe'){sel.wipe=t.value==='none'?null:t.value;computeWipeP();commit();}
+});
+
+/* ---------- interactions ---------- */
+/* ---------- V2-B: ヒット判定（フレーム内編集中は子だけ） ---------- */
+let ctxFrame=null;
+function hitAt(cssX,cssY){
+  const px=cssX*DPR,py=cssY*DPR;
+  if(ctxFrame){
+    const R=prect(ctxFrame,VC);
+    const kids=childrenOf(ctxFrame).sort(bySort).reverse();
+    for(const c of kids){
+      const r=childRect(c,ctxFrame,R,VC);
+      if(px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)return{o:c,R};
+    }
+    return null;
+  }
+  const items=rootItems().sort(bySort).reverse();   // 手前から
+  for(const o of items){
+    const r=prect(o,VC);
+    if(px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)return{o,r};
+  }
+  return null;
+}
+function renderCrumb(){
+  $('#crumb').innerHTML=ctxFrame
+    ?`ROOT ▸ <b>${ctxFrame.name}</b> <button class="btn" id="crumb-exit">↩ ROOT [Esc]</button>`:'';
+  const b=$('#crumb-exit');
+  if(b)b.addEventListener('click',exitFrame);
+}
+function exitFrame(){ctxFrame=null;maskEdit.on=false;maskEdit.f=null;sel=null;renderChip();renderCrumb();}
+function enterFrame(f){ctxFrame=f;sel=null;maskEdit.on=false;renderChip();renderCrumb();toast(f.name+' の中を編集中 — Escでルートへ');}
+
+cv.addEventListener('pointerdown',e=>{
+  if(PV.on){stopPreview();return;}
+  /* マスク編集: 4隅ハンドルのドラッグ */
+  if(maskEdit.on&&maskEdit.f){
+    const R=prect(maskEdit.f,VC);
+    const px=e.clientX*DPR,py=e.clientY*DPR;
+    for(let i=0;i<4;i++){
+      const q=maskEdit.f.quad[i];
+      if(Math.abs(px-(R.x+q.x*R.w))<14*DPR&&Math.abs(py-(R.y+q.y*R.h))<14*DPR){
+        drag={type:'mask',i,R,q0:{...q}};return;
+      }
+    }
+  }
+  const hit=(mode==='place')?hitAt(e.clientX,e.clientY):null;
+  if(hit){
+    sel=hit.o;renderChip();
+    if(ctxFrame&&!isFrame(hit.o)){   // 子パネル: ローカル単位ドラッグ
+      drag={type:'child',p:hit.o,px:e.clientX,py:e.clientY,x:hit.o.x,y:hit.o.y,S:hit.R.h/DPR,fine:e.shiftKey?0.2:1};
+    }else{
+      const r=prect(hit.o,VC);
+      drag={type:'panel',p:hit.o,px:e.clientX,py:e.clientY,x:hit.o.x,y:hit.o.y,zi:r.zi,fine:e.shiftKey?0.2:1};
+    }
+  }else{
+    if(mode==='place'){sel=null;renderChip();}
+    drag={type:'view',px:e.clientX,py:e.clientY,x:VC.x,y:VC.y,fine:e.shiftKey?0.2:1};
+  }
+});
+cv.addEventListener('dblclick',e=>{
+  if(mode!=='place')return;
+  const hit=hitAt(e.clientX,e.clientY);
+  if(!ctxFrame&&hit&&isFrame(hit.o))enterFrame(hit.o);
+  else if(ctxFrame&&!hit)exitFrame();
+});
+addEventListener('pointermove',e=>{
+  if(!drag)return;
+  if(drag.type==='mask'){
+    const q=maskEdit.f.quad[drag.i];
+    let nx=clamp((e.clientX*DPR-drag.R.x)/drag.R.w,-0.5,1.5);
+    let ny=clamp((e.clientY*DPR-drag.R.y)/drag.R.h,-0.5,1.5);
+    if(e.shiftKey){   // 軸ロック（動きの大きい軸だけ）
+      if(Math.abs(nx-drag.q0.x)>Math.abs(ny-drag.q0.y))ny=drag.q0.y;else nx=drag.q0.x;
+    }
+    q.x=+nx.toFixed(3);q.y=+ny.toFixed(3);
+  }else if(drag.type==='child'){
+    drag.p.x=+(drag.x+(e.clientX-drag.px)*drag.fine/drag.S).toFixed(4);
+    drag.p.y=+(drag.y+(e.clientY-drag.py)*drag.fine/drag.S).toFixed(4);
+  }else if(drag.type==='panel'){
+    // CSS px dx → canvas px dx*DPR、canvas: screenDx = worldDx*(VW*DPR)*zi → worldDx = dx/(VW*zi)
+    drag.p.x=+(drag.x+(e.clientX-drag.px)*drag.fine/(VW*drag.zi)).toFixed(4);
+    drag.p.y=+(drag.y+(e.clientY-drag.py)*drag.fine/(VH*drag.zi)).toFixed(4);
+  }else{
+    VC.x=drag.x-(e.clientX-drag.px)*drag.fine/(VW*VC.z);
+    VC.y=drag.y-(e.clientY-drag.py)*drag.fine/(VH*VC.z);
+  }
+});
+addEventListener('pointerup',e=>{
+  if(drag){
+    /* V2-B: パネルをフレームに重ねて離す→格納 */
+    if(drag.type==='panel'&&mode==='place'&&!ctxFrame&&!isFrame(drag.p)&&!drag.p.parent){
+      const px=e.clientX*DPR,py=e.clientY*DPR;
+      for(const f of [...PROJECT.frames].sort(bySort).reverse()){
+        const R=prect(f,VC);
+        if(px>=R.x&&px<=R.x+R.w&&py>=R.y&&py<=R.y+R.h){
+          const p=drag.p;
+          p.x=+((p.x-f.x)/f.h).toFixed(3);
+          p.y=+((p.y-f.y)/f.h).toFixed(3);
+          p.h=+(p.h/f.h).toFixed(3);
+          p.parent=f.id;
+          toast(p.name+' → '+f.name+' に格納（EJECTで戻せる）');
+          renderChip();
+          break;
+        }
+      }
+    }
+    if(drag.type!=='view')commit();
+  }
+  drag=null;
+});
+addEventListener('wheel',e=>{
+  // V2-A: UIホバー中はUI側のスクロールに委ねる（ビューをズームしない）
+  if(e.target&&e.target.closest&&e.target.closest('#bar,#cards,#chip,#fx-modal'))return;
+  e.preventDefault();
+  if(PV.on){stopPreview();return;}
+  VC.z=clamp(VC.z*Math.exp(-e.deltaY*0.0012),0.15,4);
+},{passive:false});
+
+function setMode(m){
+  mode=m;
+  document.body.classList.toggle('place',m==='place');
+  document.body.classList.toggle('take',m==='take');
+  $('#m-place').classList.toggle('on',m==='place');
+  $('#m-take').classList.toggle('on',m==='take');
+  if(m==='take')renderCards();
+  if(m!=='place'){sel=null;maskEdit.on=false;maskEdit.f=null;renderChip();}
+}
+/* ---------- V2-B: NEW FRAME ---------- */
+$('#b-frame').addEventListener('click',()=>{
+  setMode('place');
+  const maxOrd=rootItems().reduce((m,p)=>Math.max(m,p.ord??0),-1);
+  const f={id:'f'+(pid++),name:'FRAME '+String(PROJECT.frames.length+1).padStart(2,'0'),
+    x:+VC.x.toFixed(3),y:+VC.y.toFixed(3),h:0.8,depth:0.5,ord:maxOrd+1,ar:1.777,
+    quad:[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}],par:0.6,
+    fx:{in:'none',drift:'none',amt:0.12,kf:null},wipe:null};
+  PROJECT.frames.push(f);
+  sel=f;renderChip();commit();
+  toast(f.name+' を追加 — パネルを重ねて離すと格納/ダブルクリックで中へ');
+});
+$('#m-place').addEventListener('click',()=>setMode('place'));
+$('#m-take').addEventListener('click',()=>setMode('take'));
+
+function startPreview(){if(!PROJECT.take.kf.length){toast('KFがまだありません — TAKEモードで C=CAPTURE');return;}PV.on=true;PV.p=0;}
+function stopPreview(){PV.on=false;}
+
+addEventListener('keydown',e=>{
+  const tag=(e.target&&e.target.tagName)||'';
+  if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;
+  if((e.ctrlKey||e.metaKey)&&(e.key==='z'||e.key==='Z')){   // V2-A: undo/redo
+    e.preventDefault();
+    if(e.shiftKey)redo();else undo();
+  }
+  else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||e.key==='Y')){e.preventDefault();redo();}
+  else if(e.key==='1')setMode('place');
+  else if(e.key==='2')setMode('take');
+  else if((e.key==='c'||e.key==='C')&&mode==='take')capture();
+  else if(e.key===' '){e.preventDefault();PV.on?stopPreview():startPreview();}
+  else if(e.key==='ArrowUp'&&mode==='take'){e.preventDefault();selectKf(selKf<0?PROJECT.take.kf.length-1:selKf-1,true);}   // V2-A
+  else if(e.key==='ArrowDown'&&mode==='take'){e.preventDefault();selectKf(selKf<0?0:selKf+1,true);}
+  else if(e.key==='['&&mode==='place'&&sel)reorder(sel,-1);   // V2-A: 背面へ
+  else if(e.key===']'&&mode==='place'&&sel)reorder(sel,+1);   // V2-A: 前面へ
+  else if((e.key==='m'||e.key==='M')&&mode==='place')toggleMask();   // V2-B
+  else if(e.key==='f'||e.key==='F')toggleFxModal();                  // V2-C
+  else if(e.key==='g'||e.key==='G')toggleGuides();
+  else if((e.key==='Delete'||e.key==='Backspace')&&mode==='place'&&sel)deleteSel();
+  else if(e.key==='Escape'){   // カスケード FXモーダル→マスク→フレーム内→選択解除→プレビュー
+    if(document.body.classList.contains('fxopen'))toggleFxModal();
+    else if(maskEdit.on)toggleMask();
+    else if(ctxFrame)exitFrame();
+    else if(sel){sel=null;renderChip();}
+    else if(PV.on)stopPreview();
+  }
+});
+
+/* ============================================================
+   V2-C: SATSUEI FXモーダル — FX_DEFSから自動生成（UI改修ゼロ設計）
+   ============================================================ */
+function toggleFxModal(){
+  const open=!document.body.classList.contains('fxopen');
+  document.body.classList.toggle('fxopen',open);
+  if(open)buildFxUI();
+}
+function buildFxUI(){
+  const root=$('#fx-body');
+  if(!root)return;
+  const fxp=PROJECT.take.fx;
+  if(!SFX||!fxp||!fxp.chain){root.innerHTML='<span style="opacity:.6">SATSUEI CORE がありません（WebGL/コア読込を確認）</span>';return;}
+  root.innerHTML='';
+  const master=document.createElement('label');
+  master.className='fx-master';
+  master.innerHTML='<input type="checkbox" '+(fxp.enabled?'checked':'')+'> SATSUEI FX ENABLED';
+  const mi=master.querySelector('input');
+  if(mi)mi.onchange=e=>{fxp.enabled=e.target.checked;commitD();};
+  root.appendChild(master);
+  for(const ent of fxp.chain){
+    const def=SFX.FX_DEFS[ent.t];if(!def)continue;   // 未知はUIにも出さない（前方互換）
+    const box=document.createElement('div');box.className='fx-ent';
+    const head=document.createElement('label');
+    head.innerHTML='<input type="checkbox" '+(ent.on?'checked':'')+'> '+def.label+' <span style="opacity:.45">['+def.tier+']</span>';
+    const hi=head.querySelector('input');
+    if(hi)hi.onchange=e=>{ent.on=e.target.checked;commitD();};
+    box.appendChild(head);
+    for(const u of (def.ui||[])){
+      const row=document.createElement('div');row.className='fx-row';
+      const val=ent.p[u.k];
+      row.innerHTML='<span class="k">'+u.label+'</span>'
+        +'<input type="range" min="'+u.min+'" max="'+u.max+'" step="'+u.step+'" value="'+val+'">'
+        +'<span class="v">'+val+'</span>';
+      const inp=row.querySelector('input'),out=row.querySelector('.v');
+      if(inp)inp.oninput=()=>{ent.p[u.k]=parseFloat(inp.value);if(out)out.textContent=inp.value;commitD();};
+      box.appendChild(row);
+    }
+    for(const ck of (def.colors||[])){
+      const row=document.createElement('div');row.className='fx-row';
+      row.innerHTML='<span class="k">'+ck.toUpperCase()+'</span><input type="color" value="'+ent.p[ck]+'">';
+      const ci=row.querySelector('input');
+      if(ci)ci.oninput=e=>{ent.p[ck]=e.target.value;commitD();};
+      box.appendChild(row);
+    }
+    root.appendChild(box);
+  }
+}
+{
+  const bf=$('#b-fx');if(bf)bf.addEventListener('click',toggleFxModal);
+  const fc=$('#fx-close');if(fc)fc.addEventListener('click',toggleFxModal);
+}
+
+/* ---------- project copy/paste/clear ---------- */
+async function copyProj(){
+  const j=JSON.stringify(PROJECT);
+  try{await navigator.clipboard.writeText(j);toast('PROJECT JSON をコピーしました');}
+  catch(e){window.prompt('COPY PROJECT JSON:',j);}
+}
+async function pasteProj(){
+  let j='';
+  try{j=await navigator.clipboard.readText();}catch(e){j=window.prompt('PASTE PROJECT JSON:')||'';}
+  try{
+    const p=JSON.parse(j);
+    if(p&&Array.isArray(p.panels)){PROJECT=migrate(p);rebuild();toast('PROJECT を読み込みました — 画像は再ドロップ');}
+  }catch(e){toast('JSONが読めませんでした');}
+}
+$('#b-copy').addEventListener('click',copyProj);
+$('#b-paste').addEventListener('click',pasteProj);
+$('#b-guide').addEventListener('click',toggleGuides);
+$('#b-clear').addEventListener('click',()=>{
+  if(!confirm('プロジェクトを空にします。よろしいですか？'))return;
+  PROJECT=migrate({version:2,name:'oban',panels:[],frames:[],take:{version:1,name:'take-A',kf:[]}});
+  ctxFrame=null;maskEdit.on=false;maskEdit.f=null;selKf=-1;
+  sel=null;renderChip();renderCrumb();rebuild();$('#drop').classList.remove('hide');
+  try{localStorage.removeItem('oban-project')}catch(e){}
+});
+
+/* ============================================================
+   EXPORT — 単一HTMLビューア書き出し
+   画像は同梱しない: ビューアHTMLを画像と同じフォルダに置いて配布。
+   ============================================================ */
+function viewerHTML(){
+  const proj=JSON.stringify({
+    panels:PROJECT.panels.map(p=>({name:p.name,x:p.x,y:p.y,h:p.h,depth:p.depth??0.5,ord:p.ord??0,ar:p.ar||1.414,parent:p.parent||null,seq:p.seq||null})),
+    frames:PROJECT.frames.map(f=>({id:f.id,name:f.name,x:f.x,y:f.y,h:f.h,depth:f.depth??0.5,ord:f.ord??0,ar:f.ar||1.777,quad:f.quad,par:f.par??0.6,fx:f.fx||null,wipe:f.wipe||null})),
+    take:PROJECT.take});
+  const spacer=clamp(Math.round(TT.total*130),900,12000);
+  const S='<'+'/script>';
+  const CORE=(document.getElementById('satsuei-core')||{textContent:''}).textContent;   // SPEC_06 P2: コア注入
+  return `<!DOCTYPE html>
+<!-- OBAN VIEWER — このファイルを「パネル画像と同じフォルダ」に置いて開いてください（file://直開きOK）
+     generated by OBAN BUILDER / ?attract=1 で自動再生・&hud=0 でバー非表示 -->
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OBAN — ${PROJECT.name}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0c061d;overflow-x:hidden}
+#sp{height:${spacer}vh}
+#stage{position:fixed;inset:0;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#bar{position:fixed;top:0;left:0;height:2px;width:0%;background:#5AE9FF;z-index:9}
+#gate{position:fixed;inset:0;background:#0c061d;color:#f2eefc;display:flex;justify-content:center;align-items:center;font-family:monospace;font-size:11px;letter-spacing:.3em;z-index:99;transition:opacity .5s}
+#gate.done{opacity:0;pointer-events:none}
+body.nohud #bar{display:none}
+</style></head><body>
+<div id="gate">LOADING PANELS…</div>
+<div id="sp"></div>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="bar"></div>
+<script>
+${CORE}
+${S}
+<script>
+'use strict';
+const PROJ=${proj};
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const map=(v,a,b,c=0,d=1)=>c+(d-c)*clamp((v-a)/(b-a),0,1);
+const E={linear:t=>t,inout:t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,smooth:t=>t*t*(3-2*t),outCubic:t=>1-Math.pow(1-t,3),inCubic:t=>t*t*t};
+const Q=new URLSearchParams(location.search);
+if(Q.get('hud')==='0')document.body.classList.add('nohud');
+let VW=innerWidth,VH=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
+const cv=document.getElementById('cv'),vx=cv.getContext('2d');
+const sc=document.createElement('canvas'),cx=sc.getContext('2d');   // V2-C: シーンはオフスクリーンへ→FX→可視
+function onResize(){VW=innerWidth;VH=innerHeight;cv.width=Math.round(VW*DPR);cv.height=Math.round(VH*DPR);sc.width=cv.width;sc.height=cv.height;}
+addEventListener('resize',onResize);onResize();
+function buildTake(take){
+  const kf=(take.kf&&take.kf.length)?take.kf:[{x:0,y:0,z:1,dwell:1}];
+  const tw=d=>clamp(d,0.25,2.2);const segs=[];
+  for(let i=0;i<kf.length;i++){
+    segs.push({t:'dwell',a:kf[i],b:kf[i],w:Math.max(0.05,kf[i].dwell??1)});
+    if(i<kf.length-1){const A=kf[i],B=kf[i+1];
+      segs.push({t:'travel',a:A,b:B,ease:B.ease||'smooth',w:tw(Math.hypot(B.x-A.x,B.y-A.y)+Math.abs((B.z??1)-(A.z??1)))});}
+  }
+  const total=segs.reduce((s,x)=>s+x.w,0);let acc=0;
+  for(const s of segs){s.p0=acc/total;acc+=s.w;s.p1=acc/total;}
+  return{segs,total};
+}
+const TT=buildTake(PROJ.take);
+function camAt(P){
+  let seg=TT.segs[TT.segs.length-1];
+  for(const s of TT.segs){if(P<=s.p1){seg=s;break;}}
+  const f=map(P,seg.p0,seg.p1);
+  if(seg.t==='travel'){const e=(E[seg.ease]||E.smooth)(f);
+    return{x:lerp(seg.a.x,seg.b.x,e),y:lerp(seg.a.y,seg.b.y,e),z:clamp(lerp(seg.a.z??1,seg.b.z??1,e),0.25,4),segT:'travel'};}
+  return{x:seg.a.x,y:seg.a.y,z:clamp(seg.a.z??1,0.25,4),segT:seg.t};
+}
+/* loader: 単品+シーケンス全フレーム (V2-B) */
+const IM={};let total=0,loaded=0,ready=false;
+function done(){ready=true;document.getElementById('gate').classList.add('done');}
+function addLoad(name){total++;const img=new Image();img.onload=img.onerror=function(){if(++loaded>=total)done();};img.src='./'+name;IM[name]=img;}
+const seqFile=function(s,i){return s.pre+String(s.start+i).padStart(s.pad,'0')+'.'+s.ext;};
+for(const p of PROJ.panels){if(p.seq){for(let i=0;i<p.seq.n;i++)addLoad(seqFile(p.seq,i));}else addLoad(p.name);}
+if(!total)done();
+/* シーケンス再生 (V2-B): loop / once / pingpong × always / enter */
+function seqIdx(p,tS,vis){
+  const s=p.seq;
+  function wave(t){const f=Math.floor(t*s.fps);if(s.mode==='pingpong'){const m=Math.max(2*s.n-2,1);const k=f%m;return k<s.n?k:m-k;}return f%s.n;}
+  if(s.trigger==='enter'){
+    if(vis<=0){p._t0=null;return 0;}
+    if(p._t0==null&&vis>=0.3)p._t0=tS;
+    if(p._t0==null)return 0;
+    const t=tS-p._t0;
+    return s.mode==='once'?Math.min(Math.floor(t*s.fps),s.n-1):wave(t);
+  }
+  return s.mode==='once'?Math.min(Math.floor(tS*s.fps),s.n-1):wave(tS);
+}
+function panelImg(p,tS,vis){
+  if(!p.seq)return IM[p.name];
+  const i=Math.max(0,Math.min(seqIdx(p,tS,vis),p.seq.n-1));
+  return IM[seqFile(p.seq,i)];
+}
+const bySort=(a,b)=>((a.depth??0.5)-(b.depth??0.5))||((a.ord??0)-(b.ord??0));
+function rect(o,cam,W,H){
+  const eff=o.depth??0.5;
+  const pf=lerp(0.7,1.2,eff),zi=1+(cam.z-1)*lerp(0.55,1.25,eff);
+  const th=o.h*H*zi,tw=th*(o.ar||1.414);
+  return{x:W/2+(o.x-cam.x*pf)*W*zi-tw/2,y:H/2+(o.y-cam.y*pf)*H*zi-th/2,w:tw,h:th};
+}
+function childRect(c,f,R,cam){
+  const lx=(cam.x-f.x)*(f.par??0.6),ly=(cam.y-f.y)*(f.par??0.6);
+  const k=lerp(0.15,0.85,1-(c.depth??0.5));
+  const th=c.h*R.h,tw=th*(c.ar||1.414);
+  return{x:R.x+R.w/2+(c.x-lx*k)*R.h-tw/2,y:R.y+R.h/2+(c.y-ly*k)*R.h-th/2,w:tw,h:th};
+}
+function visFrac(r,W,H){
+  const ix=Math.max(0,Math.min(r.x+r.w,W)-Math.max(r.x,0));
+  const iy=Math.max(0,Math.min(r.y+r.h,H)-Math.max(r.y,0));
+  return ix*iy/Math.max(r.w*r.h,1);
+}
+function drawP(p,r,tS,W,H){
+  const img=panelImg(p,tS,visFrac(r,W,H));
+  if(img&&img.complete&&img.naturalWidth)cx.drawImage(img,r.x,r.y,r.w,r.h);
+}
+/* ---- V2-C: SATSUEI FX (rt) + FRAME IN演出/ドリフト + カバーワイプ ---- */
+const FXP=(Q.get('fx')==='0')?null:((PROJ.take&&PROJ.take.fx)||null);   // ?fx=0 で強制OFF
+const gfx=(typeof window!=='undefined'&&window.SatsueiFX)
+  ? window.SatsueiFX.createSatsueiFX()
+  : {available:false,apply:function(s){return s;}};                     // WebGL不可→素通し
+function frameKfIdx(f){
+  if(f.fx&&f.fx.kf!=null&&PROJ.take.kf[f.fx.kf])return f.fx.kf;
+  let bi=null,bd=1e9;
+  PROJ.take.kf.forEach(function(k,i){const d=Math.hypot(k.x-f.x,k.y-f.y);if(d<bd){bd=d;bi=i;}});
+  return bi;
+}
+function frameFxAt(f,P){
+  const r={dx:0,dy:0,s:1};
+  if(P==null||!f.fx)return r;
+  const ki=frameKfIdx(f);if(ki==null)return r;
+  const dSeg=TT.segs[2*ki],tSeg=(2*ki-1>=0)?TT.segs[2*ki-1]:null;
+  if(f.fx.in&&f.fx.in!=='none'&&tSeg){
+    const off=1-E.smooth(map(P,tSeg.p0,tSeg.p1));
+    const D=1.3*off;
+    if(f.fx.in==='slide-l')r.dx=-D;else if(f.fx.in==='slide-r')r.dx=D;
+    else if(f.fx.in==='slide-t')r.dy=-D;else if(f.fx.in==='slide-b')r.dy=D;
+  }
+  if(f.fx.drift&&f.fx.drift!=='none'&&dSeg){
+    const g=E.smooth(map(P,dSeg.p0,dSeg.p1));
+    const amt=f.fx.amt??0.12;
+    r.s=f.fx.drift==='push-in'?1+amt*g:1+amt*(1-g);
+  }
+  return r;
+}
+function applyFxRect(R,o,P,W,H){
+  if(!o.quad||P==null)return R;
+  const k=frameFxAt(o,P);
+  if(k.dx===0&&k.dy===0&&k.s===1)return R;
+  const cxp=R.x+R.w/2+k.dx*W,cyp=R.y+R.h/2+k.dy*H;
+  return{x:cxp-R.w*k.s/2,y:cyp-R.h*k.s/2,w:R.w*k.s,h:R.h*k.s};
+}
+function computeWipeP(){
+  const W=cv.width,H=cv.height;
+  for(const f of (PROJ.frames||[])){
+    f._wipeP=null;
+    if(!f.wipe)continue;
+    for(let s2=0;s2<=400;s2++){
+      const P=s2/400,c=camAt(P);
+      let R=rect(f,c,W,H);R=applyFxRect(R,f,P,W,H);
+      if(R.x<=0&&R.y<=0&&R.x+R.w>=W&&R.y+R.h>=H){f._wipeP=P;break;}
+    }
+  }
+}
+computeWipeP();
+addEventListener('resize',computeWipeP);
+function applyWipeVisual(P){
+  let inv=false,wa=0;
+  for(const f of (PROJ.frames||[])){
+    if(!f.wipe||f._wipeP==null)continue;
+    if(f.wipe==='invert'&&P>=f._wipeP)inv=true;
+    else if(f.wipe==='whiteout'){
+      const a=map(P,f._wipeP-0.01,f._wipeP)*(1-map(P,f._wipeP,f._wipeP+0.06));
+      wa=Math.max(wa,a);
+    }
+  }
+  cv.style.filter=inv?'invert(1) hue-rotate(180deg)':'';
+  if(wa>0.01){vx.save();vx.globalAlpha=wa;vx.fillStyle='#fff';vx.fillRect(0,0,cv.width,cv.height);vx.restore();}
+}
+let pcx=0,pcy=0;
+let mx=0,my=0,mxT=0,myT=0;
+addEventListener('mousemove',e=>{mxT=e.clientX/VW*2-1;myT=e.clientY/VH*2-1});
+/* attract */
+const attract={on:false,ret:false,retFrom:0,retT0:0,enabled:Q.get('attract')!=='0',dur:Math.max(20,parseFloat(Q.get('dur'))||90),loop:Q.get('loop')!=='0'};
+let lastAct=performance.now();
+['wheel','pointerdown','keydown'].forEach(ev=>addEventListener(ev,()=>{lastAct=performance.now();attract.on=false;attract.ret=false;},{passive:true}));
+function attractUpdate(nowMs,dt){
+  if(!attractUpdate.boot){attractUpdate.boot=1;if(Q.get('attract')==='1')attract.on=true;}
+  if(!attract.on){if(attract.enabled&&ready&&nowMs-lastAct>45000)attract.on=true;return;}
+  const max=document.documentElement.scrollHeight-VH;
+  if(attract.ret){const t=clamp((nowMs-attract.retT0)/4200,0,1);scrollTo(0,attract.retFrom*(1-E.inout(t)));if(t>=1)attract.ret=false;return;}
+  const P=clamp(scrollY/Math.max(max,1),0,1);
+  if(P>=1){if(attract.loop){attract.ret=true;attract.retFrom=scrollY;attract.retT0=nowMs;}else attract.on=false;return;}
+  const c=camAt(P);
+  scrollTo(0,Math.min(max,scrollY+(max/attract.dur)*(c.segT==='dwell'?0.6:1)*dt));
+}
+let Pd=0;
+function frame(nowMs){
+  const dt=clamp((nowMs-(frame.last??nowMs))/1000,0,0.05);frame.last=nowMs;
+  const tS=nowMs/1000;
+  mx+=(mxT-mx)*0.08;my+=(myT-my)*0.08;
+  attractUpdate(nowMs,dt);
+  if(ready){
+    const max=document.documentElement.scrollHeight-VH;
+    const P=clamp(scrollY/Math.max(max,1),0,1);
+    Pd+=(P-Pd)*0.16;if(Math.abs(P-Pd)<0.0004)Pd=P;
+    const cam={x:camAt(Pd).x+mx*0.01,y:camAt(Pd).y+my*0.008,z:camAt(Pd).z};
+    const W=cv.width,H=cv.height;
+    cx.clearRect(0,0,W,H);
+    const items=[].concat(PROJ.panels.filter(p=>!p.parent),PROJ.frames||[]).sort(bySort);
+    for(const o of items){
+      let R=rect(o,cam,W,H);
+      R=applyFxRect(R,o,Pd,W,H);   // V2-C: slide-in / push-in / pull-out
+      if(R.x>W+R.w||R.x+R.w<-R.w||R.y>H+R.h||R.y+R.h<-R.h)continue;
+      if(o.quad){   // FRAME: quadマスク+内部パララックス
+        cx.save();
+        cx.beginPath();
+        o.quad.forEach(function(q,i){const px=R.x+q.x*R.w,py=R.y+q.y*R.h;i?cx.lineTo(px,py):cx.moveTo(px,py);});
+        cx.closePath();cx.clip();
+        const kids=PROJ.panels.filter(p=>p.parent===o.id).sort(bySort);
+        for(const c of kids)drawP(c,childRect(c,o,R,cam),tS,W,H);
+        cx.restore();
+      }else drawP(o,R,tS,W,H);
+    }
+    /* V2-C: SATSUEI FX (rt) — enabled:false は apply を呼ばない（後方互換の要） */
+    const out=(FXP&&FXP.enabled&&gfx.available)
+      ? gfx.apply(sc,FXP,{t:tS,velX:clamp(cam.x-pcx,-0.05,0.05),velY:clamp(cam.y-pcy,-0.05,0.05)})
+      : sc;
+    vx.clearRect(0,0,W,H);vx.drawImage(out,0,0,W,H);
+    pcx=cam.x;pcy=cam.y;
+    applyWipeVisual(Pd);
+    document.getElementById('bar').style.width=(Pd*100).toFixed(2)+'%';
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+${S}</body></html>`;
+}
+$('#b-export').addEventListener('click',()=>{
+  if(!PROJECT.panels.length){toast('パネルがありません — まず画像をドロップ');return;}
+  if(!PROJECT.take.kf.length){toast('TAKEが空です — 2.TAKE で C=CAPTURE してから書き出し');return;}
+  const blob=new Blob([viewerHTML()],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='oban-viewer.html';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast('oban-viewer.html を書き出しました — 画像と同じフォルダへ');
+});
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+function frame(nowMs){
+  const dt=clamp((nowMs-(frame.last??nowMs))/1000,0,0.05);frame.last=nowMs;
+  const tS=nowMs/1000;
+  const W=cv.width,H=cv.height;
+  let cam=VC,P=null;
+  if(PV.on){
+    PV.p+=dt/(TT.total*1.15);
+    if(PV.p>=1)PV.p=0;                    // ループプレビュー
+    cam=camAt(PV.p);P=PV.p;
+  }
+  /* V2-C: SPEC_06 P2 — 編集中はFXなし（軽量優先）、PREVIEW中のみdraft適用 */
+  const fxp=PROJECT.take.fx;
+  const useFx=PV.on&&fxp&&fxp.enabled&&gFxOK();
+  if(useFx){ensureSc(W,H);cx=gScx;}else cx=cx0;
+  cx.clearRect(0,0,W,H);
+  grid(cam);
+  renderWorld(cam,tS,P);
+  if(useFx){
+    const out=gFx.apply(gSc,fxp,{t:tS});   // draft: velなし=mbは素通し（実装済み挙動）
+    cx=cx0;cx.clearRect(0,0,W,H);cx.drawImage(out,0,0,W,H);
+  }
+  applyWipeVisual(P);                       // V2-C: invert/whiteout（PREVIEW時のみ発火）
+  drawTakePath(cam);
+  drawGuides();
+  if(PV.on){
+    cx.save();cx.fillStyle='#5AE9FF';cx.font=`${11*DPR}px monospace`;
+    cx.fillText('PREVIEW '+(PV.p*100).toFixed(0)+'%'+(useFx?' +FX':'')+' — 触ると停止',14*DPR,H-16*DPR);cx.restore();
+  }
+  if(toastT>0){toastT-=dt;if(toastT<=0)$('#toast').style.display='none';}
+  requestAnimationFrame(frame);
+}
+PROJECT=migrate(PROJECT);   // V2-C: 初期状態にも take.fx / frame.fx を補完
+load();
+renderCards();
+commit();   // V2-A: 履歴の初期状態を積む
+computeWipeP();
+bootedV2C=true;
+if(PROJECT.panels.length)$('#drop').classList.add('hide');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

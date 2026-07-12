@@ -69,7 +69,8 @@ h1{
   filter:drop-shadow(0 0 26px rgba(255,79,168,0.3));
 }
 .sub{font-family:var(--jp);font-size:12px;letter-spacing:0.4em;text-indent:0.4em;color:var(--dim);}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;max-width:680px;width:100%;}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:22px;max-width:860px;width:100%;}
+@media (max-width:820px){ .grid{grid-template-columns:1fr 1fr;} }
 @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
 a.card{
   position:relative;display:block;
@@ -127,8 +128,18 @@ footer{font-size:10px;color:var(--dim);letter-spacing:0.3em;display:flex;gap:18p
         <span class="tag">4K</span>
       </div>
     </a>
-    <a class="card" href="composer.html">
+    <a class="card" href="oban-builder.html">
       <span class="ord">02</span>
+      <div class="name">OBAN</div>
+      <div class="desc">モーションコミック<br>PLACE→TAKE→書き出し</div>
+      <div class="tags">
+        <span class="tag">PLACE</span>
+        <span class="tag">TAKE</span>
+        <span class="tag">WEB</span>
+      </div>
+    </a>
+    <a class="card" href="composer.html">
+      <span class="ord">03</span>
       <div class="name">COMPOSER</div>
       <div class="desc">音 / PAN / タイミング確認<br>（撮影処理はAE）</div>
       <div class="tags">

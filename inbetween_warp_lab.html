@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WARP LAB — マルチ原画ラフ中割 検証</title>
+<style>
+  :root{--bg:#14161a;--panel:#1c1f26;--line:#2a2f39;--ink:#e8eaee;
+    --muted:#8b93a3;--accent:#e0b23a;--a:#ff5a6e;--b:#4aa8ff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.5 -apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}
+  header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:12px}
+  header h1{font-size:14px;letter-spacing:.08em;margin:0;font-weight:700}
+  header .sub{color:var(--muted);font-size:11px}
+  .wrap{display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card h2{margin:0 0 8px;font-size:11px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;font-weight:700}
+  canvas{background:#fff;border-radius:6px;display:block;touch-action:none}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  button{background:#262b34;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer}
+  button:hover{border-color:#3a4150}
+  button.on{background:var(--accent);color:#1a1a1a;border-color:var(--accent);font-weight:700}
+  label{font-size:11px;color:var(--muted)}
+  input[type=range]{accent-color:var(--accent)}
+  .val{color:var(--accent);font-variant-numeric:tabular-nums;min-width:34px;display:inline-block;text-align:right}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .hint{color:var(--muted);font-size:11px;line-height:1.6}
+  .badge{font-size:10px;padding:2px 6px;border-radius:4px;background:#2a2f39;color:var(--muted)}
+  /* key strip */
+  #strip{display:flex;gap:6px;flex-wrap:wrap}
+  .kf{position:relative;width:74px;border:2px solid var(--line);border-radius:6px;overflow:hidden;cursor:pointer;background:#fff}
+  .kf.sel{border-color:var(--accent)}
+  .kf canvas{width:100%;height:56px;object-fit:contain;border-radius:0;pointer-events:none}
+  .kf .no{position:absolute;top:2px;left:3px;font-size:10px;font-weight:700;color:#333;background:rgba(255,255,255,.7);padding:0 3px;border-radius:3px}
+  .kf .ops{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;background:rgba(20,22,26,.85)}
+  .kf .ops button{border:0;border-radius:0;padding:1px 5px;font-size:11px;background:transparent;color:#cfd4dd}
+  .kf .ops button:hover{background:#333}
+</style>
+</head>
+<body>
+<header>
+  <h1>WARP LAB</h1>
+  <span class="sub">複数原画（〜15枚）ラスター・フロー中割 — 連続再生 / フェード比較 / イーズ検証</span>
+</header>
+
+<div class="wrap">
+  <div class="col">
+    <div class="card">
+      <h2>原画（並べ替え / 追加 / 描画）</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button id="load">📁 画像を読み込み</button>
+        <button id="addBlank">＋ 空白を追加</button>
+        <input id="file" type="file" accept="image/*" multiple hidden>
+        <span class="badge" id="kcount">2枚</span>
+      </div>
+      <div id="strip" style="margin-bottom:10px"></div>
+      <div class="row" style="margin-bottom:8px">
+        <span class="badge" id="editLbl">編集: #1</span>
+        <button id="pen" class="on">ペン</button>
+        <button id="eraser">消しゴム</button>
+        <label>太さ <input id="size" type="range" min="1" max="24" value="5" style="width:60px"></label>
+        <button id="clear">クリア</button>
+      </div>
+      <canvas id="edit" width="360" height="360"></canvas>
+      <div class="hint" style="margin-top:6px">サムネをクリックで編集対象を選択。◀▶で並べ替え、×で削除。隣の原画が薄く重なって見えます。</div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>連続プレビュー</h2>
+      <canvas id="preview" width="360" height="360"></canvas>
+      <div class="row" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">方式:</span>
+        <div class="seg">
+          <button id="mWarp" class="md on">ワープ(フロー)</button>
+          <button id="mFade" class="md">クロスフェード</button>
+        </div>
+        <label><input id="arrows" type="checkbox"> フロー矢印</label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="play" class="on">▶ 連続再生</button>
+        <label><input id="ping" type="checkbox"> 往復</label>
+        <label><input id="loopc" type="checkbox" checked> ループ</label>
+        <label>fps <input id="fps" type="range" min="4" max="24" value="12" style="width:60px"><span class="val" id="fpsV">12</span></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="flex:1">フレーム<input id="scrub" type="range" min="0" max="6" value="0" step="1" style="width:100%"></label>
+      </div>
+      <div class="hint" id="frameLbl">—</div>
+    </div>
+  </div>
+
+  <div class="col" style="min-width:280px;flex:1">
+    <div class="card">
+      <h2>フロー & タイミング</h2>
+      <div class="row">
+        <button id="compute">⟳ 全フロー再計算</button>
+        <span class="badge" id="flowStat">未計算</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>中割枚数/区間 <input id="count" type="range" min="1" max="11" value="4" style="width:90px"><span class="val" id="countV">4</span></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>探索範囲 <input id="search" type="range" min="6" max="28" value="16" style="width:90px"><span class="val" id="searchV">16</span></label>
+        <span class="hint">px</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>フロー平滑 <input id="smooth" type="range" min="0" max="6" value="3" style="width:90px"><span class="val" id="smoothV">3</span></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">イーズ:</span>
+        <div class="seg">
+          <button data-ease="linear" class="ez on">リニア</button>
+          <button data-ease="in" class="ez">加速</button>
+          <button data-ease="out" class="ez">減速</button>
+          <button data-ease="inout" class="ez">両</button>
+        </div>
+        <label>強<input id="power" type="range" min="10" max="40" value="20" style="width:60px"><span class="val" id="powerV">2.0</span></label>
+      </div>
+      <div style="margin-top:12px">
+        <div class="hint" style="margin-bottom:4px">スペーシング（1区間ぶん）</div>
+        <canvas id="chart" width="360" height="50" style="background:#111318;border:1px solid var(--line)"></canvas>
+      </div>
+      <div class="hint" style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+        隣り合う原画ごとに動きベクトルを推定して連続再生します。回転・線の増減・隠れで破綻するのは原理的な限界（ラフ下書き用）。852話さんのAI中割り(C型)公開までのつなぎとして。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const W=360,H=360;
+function mk(){const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');x.lineCap='round';x.lineJoin='round';return{c,x};}
+// keys: array of {c,x}
+let keys=[mk(),mk()];
+let sel=0;
+const state={tool:'pen',size:5,count:4,search:16,smooth:3,ease:'linear',power:2.0,
+  mode:'warp',arrows:false,playing:true,ping:false,loop:true,fps:12,frame:0};
+
+// ===== editor =====
+const edit=document.getElementById('edit'),ectx=edit.getContext('2d');
+const curKey=()=>keys[sel];
+function renderEdit(){ectx.clearRect(0,0,W,H);
+  // onion: show both adjacent frames (prev + next) so a newly added blank still has a reference
+  const prev=keys[sel-1],next=keys[sel+1];
+  if(prev){ectx.globalAlpha=0.16;ectx.drawImage(prev.c,0,0);}
+  if(next){ectx.globalAlpha=0.16;ectx.drawImage(next.c,0,0);}
+  ectx.globalAlpha=1;ectx.drawImage(curKey().c,0,0);
+  document.getElementById('editLbl').textContent='編集: #'+(sel+1);}
+let drawing=false,lastP=null;
+function pos(e){const r=edit.getBoundingClientRect();const t=e.touches?e.touches[0]:e;
+  return{x:(t.clientX-r.left)*(W/r.width),y:(t.clientY-r.top)*(H/r.height)};}
+function cfg(x){x.lineWidth=state.size;
+  if(state.tool==='eraser')x.globalCompositeOperation='destination-out';
+  else{x.globalCompositeOperation='source-over';x.strokeStyle='#111';}}
+function down(e){e.preventDefault();drawing=true;lastP=pos(e);const x=curKey().x;cfg(x);
+  x.beginPath();x.arc(lastP.x,lastP.y,state.size/2,0,7);x.fillStyle='#111';x.fill();
+  x.globalCompositeOperation='source-over';renderEdit();}
+function move(e){if(!drawing)return;e.preventDefault();const p=pos(e);const x=curKey().x;cfg(x);
+  x.beginPath();x.moveTo(lastP.x,lastP.y);x.lineTo(p.x,p.y);x.stroke();
+  x.globalCompositeOperation='source-over';lastP=p;renderEdit();}
+function up(){if(drawing){drawing=false;lastP=null;renderStrip();scheduleFlow();}}
+edit.addEventListener('mousedown',down);edit.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+edit.addEventListener('touchstart',down,{passive:false});edit.addEventListener('touchmove',move,{passive:false});edit.addEventListener('touchend',up);
+
+// ===== key strip =====
+const strip=document.getElementById('strip');
+function renderStrip(){strip.innerHTML='';
+  keys.forEach((k,i)=>{
+    const d=document.createElement('div');d.className='kf'+(i===sel?' sel':'');
+    const tc=document.createElement('canvas');tc.width=74;tc.height=56;const tx=tc.getContext('2d');
+    tx.fillStyle='#fff';tx.fillRect(0,0,74,56);tx.drawImage(k.c,0,0,74,56);
+    d.appendChild(tc);
+    const no=document.createElement('div');no.className='no';no.textContent=i+1;d.appendChild(no);
+    const ops=document.createElement('div');ops.className='ops';
+    ops.innerHTML='<button data-op="l">◀</button><button data-op="x">×</button><button data-op="r">▶</button>';
+    d.appendChild(ops);
+    d.onclick=e=>{const op=e.target.dataset.op;
+      if(op==='l'){if(i>0){[keys[i-1],keys[i]]=[keys[i],keys[i-1]];sel=i-1;afterKeysChange();}return;}
+      if(op==='r'){if(i<keys.length-1){[keys[i+1],keys[i]]=[keys[i],keys[i+1]];sel=i+1;afterKeysChange();}return;}
+      if(op==='x'){if(keys.length>2){keys.splice(i,1);if(sel>=keys.length)sel=keys.length-1;afterKeysChange();}return;}
+      sel=i;renderEdit();renderStrip();};
+    strip.appendChild(d);
+  });
+  document.getElementById('kcount').textContent=keys.length+'枚';
+}
+function afterKeysChange(){renderEdit();renderStrip();state.frame=0;computeFlow();}
+
+// ===== file load =====
+document.getElementById('load').onclick=()=>document.getElementById('file').click();
+document.getElementById('addBlank').onclick=()=>{if(keys.length>=15)return;keys.push(mk());sel=keys.length-1;afterKeysChange();};
+document.getElementById('file').onchange=e=>{
+  const files=[...e.target.files];let pending=files.length;
+  files.forEach(f=>{const img=new Image();img.onload=()=>{
+    if(keys.length<15){const k=mk();k.x.fillStyle='#fff';k.x.fillRect(0,0,W,H);
+      const s=Math.min(W/img.width,H/img.height);const w=img.width*s,h=img.height*s;
+      k.x.drawImage(img,(W-w)/2,(H-h)/2,w,h);keys.push(k);}
+    if(--pending===0){sel=keys.length-1;afterKeysChange();}
+    URL.revokeObjectURL(img.src);
+  };img.src=URL.createObjectURL(f);});
+  e.target.value='';
+};
+
+// ===== ease / timeline =====
+function ease(u){const p=state.power;switch(state.ease){
+  case'in':return Math.pow(u,p);case'out':return 1-Math.pow(1-u,p);
+  case'inout':return u<.5?.5*Math.pow(2*u,p):1-.5*Math.pow(2-2*u,p);default:return u;}}
+const nSeg=()=>keys.length-1;
+const perSeg=()=>state.count+1;                 // frames per segment incl. start key
+const totalFrames=()=>nSeg()*perSeg()+1;        // + final key
+// global g -> {seg, local, t, isKey}
+function decode(g){const ps=perSeg();let seg=Math.floor(g/ps);let local=g-seg*ps;
+  if(seg>=nSeg()){seg=nSeg()-1;local=ps;} // final key
+  return{seg,local,t:ease(local/ps),isKey:local===0||local===ps};}
+
+// ===== flow (block matching), per segment =====
+const FW=96;const gcv=document.createElement('canvas');gcv.width=FW;gcv.height=FW;const gctx=gcv.getContext('2d');
+function grayOf(canvas){gctx.fillStyle='#fff';gctx.fillRect(0,0,FW,FW);gctx.drawImage(canvas,0,0,FW,FW);
+  const d=gctx.getImageData(0,0,FW,FW).data;const g=new Float32Array(FW*FW);
+  for(let i=0,j=0;i<g.length;i++,j+=4)g[i]=d[j]*0.3+d[j+1]*0.59+d[j+2]*0.11;return g;}
+const BLK=5,STEP=4;
+function matchOne(src,dst,sr){const gw=Math.floor((FW-BLK)/STEP),gh=gw;
+  const vx=new Float32Array(gw*gh),vy=new Float32Array(gw*gh);const sc=W/FW;
+  for(let by=0;by<gh;by++)for(let bx=0;bx<gw;bx++){const ox=bx*STEP,oy=by*STEP;
+    let best=1e18,bdx=0,bdy=0,active=false;
+    for(let dy=-sr;dy<=sr;dy++)for(let dx=-sr;dx<=sr;dx++){const tx=ox+dx,ty=oy+dy;
+      if(tx<0||ty<0||tx+BLK>=FW||ty+BLK>=FW)continue;let s=0;
+      for(let y=0;y<BLK;y++)for(let x=0;x<BLK;x++){const a=src[(oy+y)*FW+ox+x],b=dst[(ty+y)*FW+tx+x];
+        s+=(a-b)*(a-b);if(a<235)active=true;}
+      if(s<best){best=s;bdx=dx;bdy=dy;}}
+    vx[by*gw+bx]=active?bdx*sc:0;vy[by*gw+bx]=active?bdy*sc:0;}
+  return{gw,gh,vx,vy};}
+function blurField(f,passes){for(let p=0;p<passes;p++){const nx=f.vx.slice(),ny=f.vy.slice();
+  for(let y=0;y<f.gh;y++)for(let x=0;x<f.gw;x++){let sx=0,sy=0,n=0;
+    for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const xx=x+i,yy=y+j;
+      if(xx<0||yy<0||xx>=f.gw||yy>=f.gh)continue;sx+=f.vx[yy*f.gw+xx];sy+=f.vy[yy*f.gw+xx];n++;}
+    nx[y*f.gw+x]=sx/n;ny[y*f.gw+x]=sy/n;}f.vx=nx;f.vy=ny;}}
+let flows=[]; // per segment {gw,gh,fwdX,fwdY,bwdX,bwdY}
+function computeFlow(){flows=[];
+  for(let i=0;i<nSeg();i++){const gA=grayOf(keys[i].c),gB=grayOf(keys[i+1].c);
+    const fwd=matchOne(gA,gB,state.search),bwd=matchOne(gB,gA,state.search);
+    blurField(fwd,state.smooth);blurField(bwd,state.smooth);
+    flows.push({gw:fwd.gw,gh:fwd.gh,fwdX:fwd.vx,fwdY:fwd.vy,bwdX:bwd.vx,bwdY:bwd.vy});}
+  document.getElementById('flowStat').textContent='計算済 '+nSeg()+'区間';
+  syncScrub();renderPreview();}
+let flowTimer=null;
+function scheduleFlow(){document.getElementById('flowStat').textContent='要再計算…';
+  clearTimeout(flowTimer);flowTimer=setTimeout(computeFlow,350);}
+function sampleFlow(gx,gy,fx,fy,fl){const gw=fl.gw,gh=fl.gh,cell=W/gw;
+  let u=gx/cell-0.5,v=gy/cell-0.5;u=Math.max(0,Math.min(gw-1.001,u));v=Math.max(0,Math.min(gh-1.001,v));
+  const x0=u|0,y0=v|0,tx=u-x0,ty=v-y0;const i00=y0*gw+x0,i10=i00+1,i01=i00+gw,i11=i01+1;
+  const dx=(fx[i00]*(1-tx)+fx[i10]*tx)*(1-ty)+(fx[i01]*(1-tx)+fx[i11]*tx)*ty;
+  const dy=(fy[i00]*(1-tx)+fy[i10]*tx)*(1-ty)+(fy[i01]*(1-tx)+fy[i11]*tx)*ty;return[dx,dy];}
+
+// ===== warp render =====
+const WR=190;const wcv=document.createElement('canvas');wcv.width=WR;wcv.height=WR;const wctx=wcv.getContext('2d');
+const flatCv=document.createElement('canvas');flatCv.width=W;flatCv.height=H;const flatCtx=flatCv.getContext('2d');
+function flatten(src){flatCtx.fillStyle='#fff';flatCtx.fillRect(0,0,W,H);flatCtx.drawImage(src,0,0);
+  return flatCtx.getImageData(0,0,W,H).data;}
+function samplePx(img,x,y){if(x<0||y<0||x>=W-1||y>=H-1)return[255,255,255];
+  const x0=x|0,y0=y|0,tx=x-x0,ty=y-y0;const i00=(y0*W+x0)*4,i10=i00+4,i01=i00+W*4,i11=i01+4;const o=[0,0,0];
+  for(let k=0;k<3;k++){const a=img[i00+k]*(1-tx)+img[i10+k]*tx,b=img[i01+k]*(1-tx)+img[i11+k]*tx;o[k]=a*(1-ty)+b*ty;}return o;}
+function warpImage(t,kA,kB,fl){const iA=flatten(kA.c),iB=flatten(kB.c);
+  const out=wctx.createImageData(WR,WR),o=out.data,sc=W/WR;
+  for(let py=0;py<WR;py++)for(let px=0;px<WR;px++){const gx=px*sc,gy=py*sc;
+    const[fx,fy]=sampleFlow(gx,gy,fl.fwdX,fl.fwdY,fl);const[bx,by]=sampleFlow(gx,gy,fl.bwdX,fl.bwdY,fl);
+    const ca=samplePx(iA,gx-t*fx,gy-t*fy),cb=samplePx(iB,gx-(1-t)*bx,gy-(1-t)*by);
+    const idx=(py*WR+px)*4;o[idx]=ca[0]*(1-t)+cb[0]*t;o[idx+1]=ca[1]*(1-t)+cb[1]*t;o[idx+2]=ca[2]*(1-t)+cb[2]*t;o[idx+3]=255;}
+  wctx.putImageData(out,0,0);}
+
+// ===== preview =====
+const prev=document.getElementById('preview'),pctx=prev.getContext('2d');
+function renderPreview(){const g=state.frame,d=decode(g),lbl=document.getElementById('frameLbl');
+  pctx.fillStyle='#fff';pctx.fillRect(0,0,W,H);pctx.globalAlpha=1;
+  const kA=keys[d.seg],kB=keys[d.seg+1];
+  if(d.local===0){pctx.drawImage(kA.c,0,0);lbl.textContent='原画 #'+(d.seg+1);}
+  else if(d.local>=perSeg()){pctx.drawImage(kB.c,0,0);lbl.textContent='原画 #'+(d.seg+2);}
+  else{const fl=flows[d.seg];
+    if(state.mode==='warp'&&fl){warpImage(d.t,kA,kB,fl);pctx.imageSmoothingEnabled=true;pctx.drawImage(wcv,0,0,W,H);
+      lbl.textContent='区間 '+(d.seg+1)+'/'+nSeg()+'  中割 '+d.local+'/'+state.count+'  t='+d.t.toFixed(2);}
+    else{pctx.globalAlpha=1-d.t;pctx.drawImage(kA.c,0,0);pctx.globalAlpha=d.t;pctx.drawImage(kB.c,0,0);pctx.globalAlpha=1;
+      lbl.textContent=(fl?'フェード ':'（未計算→フェード）')+'区間 '+(d.seg+1)+'/'+nSeg()+'  '+d.local+'/'+state.count;}}
+  if(state.arrows&&flows[d.seg])drawArrows(flows[d.seg]);}
+function drawArrows(fl){pctx.strokeStyle='rgba(224,178,58,.9)';pctx.fillStyle='rgba(224,178,58,.9)';pctx.lineWidth=1;
+  const gw=fl.gw,cell=W/gw;
+  for(let y=0;y<fl.gh;y+=2)for(let x=0;x<gw;x+=2){const dx=fl.fwdX[y*gw+x],dy=fl.fwdY[y*gw+x];
+    if(Math.abs(dx)+Math.abs(dy)<1)continue;const ox=(x+.5)*cell,oy=(y+.5)*cell;
+    pctx.beginPath();pctx.moveTo(ox,oy);pctx.lineTo(ox+dx,oy+dy);pctx.stroke();
+    pctx.beginPath();pctx.arc(ox+dx,oy+dy,1.6,0,7);pctx.fill();}}
+
+// ===== chart =====
+const chart=document.getElementById('chart'),cctx=chart.getContext('2d');
+function renderChart(){const w=chart.width,h=chart.height,y=h/2,pad=18;cctx.clearRect(0,0,w,h);
+  cctx.strokeStyle='#2a2f39';cctx.beginPath();cctx.moveTo(pad,y);cctx.lineTo(w-pad,y);cctx.stroke();
+  const N=state.count;for(let i=0;i<=N+1;i++){const t=ease(i/(N+1)),px=pad+(w-2*pad)*t,end=(i===0||i===N+1);
+    cctx.fillStyle=i===0?'#ff5a6e':i===N+1?'#4aa8ff':'#e0b23a';cctx.beginPath();cctx.arc(px,y,end?6:4,0,7);cctx.fill();}}
+
+// ===== playback =====
+let last=0,acc=0,dir=1;
+function loop(ts){if(!last)last=ts;const dt=ts-last;last=ts;
+  if(state.playing){acc+=dt;const step=1000/state.fps;while(acc>=step){acc-=step;advance();}}
+  requestAnimationFrame(loop);}
+function advance(){const max=totalFrames()-1;
+  if(state.ping){state.frame+=dir;if(state.frame>=max){state.frame=max;dir=-1;}else if(state.frame<=0){state.frame=0;dir=1;}}
+  else{state.frame++;if(state.frame>max)state.frame=state.loop?0:max;}
+  document.getElementById('scrub').value=state.frame;renderPreview();}
+function syncScrub(){const sc=document.getElementById('scrub');const max=totalFrames()-1;sc.max=max;
+  if(state.frame>max)state.frame=max;sc.value=state.frame;}
+
+// ===== UI =====
+const $=id=>document.getElementById(id);
+$('pen').onclick=()=>{state.tool='pen';$('pen').classList.add('on');$('eraser').classList.remove('on');};
+$('eraser').onclick=()=>{state.tool='eraser';$('eraser').classList.add('on');$('pen').classList.remove('on');};
+$('size').oninput=e=>state.size=+e.target.value;
+$('clear').onclick=()=>{curKey().x.clearRect(0,0,W,H);renderEdit();renderStrip();scheduleFlow();};
+$('mWarp').onclick=()=>{state.mode='warp';$('mWarp').classList.add('on');$('mFade').classList.remove('on');if(!flows.length)computeFlow();renderPreview();};
+$('mFade').onclick=()=>{state.mode='fade';$('mFade').classList.add('on');$('mWarp').classList.remove('on');renderPreview();};
+$('arrows').onchange=e=>{state.arrows=e.target.checked;renderPreview();};
+$('compute').onclick=computeFlow;
+$('count').oninput=e=>{state.count=+e.target.value;$('countV').textContent=state.count;syncScrub();renderChart();renderPreview();};
+$('search').oninput=e=>{state.search=+e.target.value;$('searchV').textContent=state.search;scheduleFlow();};
+$('smooth').oninput=e=>{state.smooth=+e.target.value;$('smoothV').textContent=state.smooth;scheduleFlow();};
+document.querySelectorAll('.ez').forEach(b=>b.onclick=()=>{state.ease=b.dataset.ease;
+  document.querySelectorAll('.ez').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderChart();renderPreview();});
+$('power').oninput=e=>{state.power=+e.target.value/10;$('powerV').textContent=state.power.toFixed(1);renderChart();renderPreview();};
+$('play').onclick=()=>{state.playing=!state.playing;$('play').classList.toggle('on',state.playing);$('play').textContent=state.playing?'▶ 連続再生':'⏸ 停止';};
+$('ping').onchange=e=>state.ping=e.target.checked;
+$('loopc').onchange=e=>state.loop=e.target.checked;
+$('fps').oninput=e=>{state.fps=+e.target.value;$('fpsV').textContent=state.fps;};
+$('scrub').oninput=e=>{state.playing=false;$('play').classList.remove('on');$('play').textContent='▶ 連続再生';state.frame=+e.target.value;renderPreview();};
+
+// ===== seed =====
+(function seed(){const a=keys[0].x,b=keys[1].x;
+  a.strokeStyle='#111';a.lineWidth=5;a.beginPath();a.ellipse(110,110,52,52,0,0,7);a.stroke();
+  b.strokeStyle='#111';b.lineWidth=5;b.beginPath();b.ellipse(250,250,66,42,0,0,7);b.stroke();})();
+renderStrip();renderEdit();renderChart();computeFlow();requestAnimationFrame(loop);
+</script>
+</body>
+</html>

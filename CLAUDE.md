@@ -1,13 +1,27 @@
-# CLAUDE.md — Animation Paint
+# CLAUDE.md — Animation Paint（ANI × OBN × COM）
 
-ブラウザベースの日本アニメ作画特化エディタ。単一HTMLで完結、IndexedDB自動保存、Chrome / iPad Safari 対応。
+ブラウザベースの日本アニメ作画特化エディタ群。**ANI**mator（作画）× **OB**a**N**（モーションコミック）× **COM**poser（合成/書き出し）の3ツール。単一HTMLで完結、IndexedDB自動保存、Chrome / iPad Safari 対応。
 
 ## ファイル構成（リポジトリ直下）
+
+アプリ本体（単一HTML）:
 - `animator.html` — メインの作画エディタ（実体。最重要）
+- `oban-builder.html` — OBAN BUILDER。モーションコミック製造機（画像→PLACE→TAKE→単一HTMLビューア書き出し）。パイプライン上は animator と composer の間
 - `composer.html` — マルチトラック合成（カメラ/キーフレーム/書き出し）
-- `index.html` — ランディングページ
+- `index.html` — ランディングページ（**OBAN 追加予定**）
+- `inbetween_lab.html` / `inbetween_warp_lab.html` — 中割り実験ラボ
 - `tools/check.js` — 依存ゼロのスモークチェック（構文/配線/ID重複/デッドコード）
-- `ANIMATOR_HANDOVER.md` — 詳細な実装メモ／設計履歴（深掘りはこちら）
+
+ドキュメント（ハンドオーバー／仕様）:
+- `ANIMATOR_HANDOVER.md` — animator 実装メモ／設計履歴（深掘りはこちら）
+- `COMPOSER_HANDOVER.md` — composer 実装メモ
+- `OBAN_BUILDER_HANDOVER.md` — OBAN BUILDER 実装メモ（旧 OBAN_BUILDER/CLAUDE.md）
+- `MOTION_COMIC_SPEC.md` / `EXPORT_WEB_SPEC.md` — モーションコミック／WEB書き出し仕様
+- `PIPELINE.md` — 3ツールの入口/出口フォーマット表。**入出力を変えたら必ず更新**。新ルート探しはまずここ
+- `SPEC_01_OBAN_TAKE_RIG.md` — 大判カメラTAKE化の元仕様（SPEC_01 P2 = OBAN BUILDER）
+- `SPEC_05_OBAN_BUILDER_V2.md` — OBAN BUILDER V2 拡張仕様
+- `SPEC_06_SATSUEI_KIT.md` — 撮影処理キット（fx共通スキーマ・composer/OBAN統合）
+- `SPEC_07_ANIMATOR_OBAN_BRIDGE.md` — animator⇄OBAN 連番往復ブリッジ仕様
 
 GitHub: https://github.com/maso1737/animation-paint
 Pages: https://maso1737.github.io/animation-paint/
@@ -36,10 +50,14 @@ node tools/check.js
 - **保存**: IndexedDB（差分・debounce）。meta に workW/workH・guides・ワークエリア等。
 - **ショートカット**: `SHORTCUT_ACTIONS` 登録制＋`gKeymap`(localStorage)。設定パネル⚙で再割当。
 - **FILL PALETTE**: `gPalette`(localStorage `animator_palette_v1`)。スロット選択中にスポイトで上書き、＋/−/JSON入出力。
-- **ライブ連携**: `BroadcastChannel('tdr_live')`。ANIMATOR保存→COMPOSERへ project-update。COMPOSERは projectId一致トラックの絵だけ差し替え（KF/transform保持）。`→ COMPOSER` は別ウィンドウで開く。
+- **ライブ連携**: `BroadcastChannel('tdr_live')`。ANIMATOR保存→COMPOSERへ project-update。COMPOSERは projectId一致トラックの絵だけ差し替え（KF/transform保持）。`→ COMPOSER` は別ウィンドウで開く。**OBAN も同じチャンネル・同じ語彙に参加**（animator から見ればもう1つの composer。詳細は SPEC_07）。
 - **ガイド**: 解像度枠/セーフフレームは `guide-layer` に表示のみ（書き出し非合成）。
 - **座標/入力**: 全ポインタ処理は `#stage` で一元化。`toCanvasCoord()` が flip/mirror 換算。
 
 ## 既知の制限
 - ライブ連携は同一ブラウザ・同一オリジンのタブ間のみ。
 - キャンバス拡大はメモリ×コマ数で増える（8Kは多コマ不可。上限4K面積）。
+
+## 整理メモ（2026-07 統合時）
+- 旧 `LP_motion-graphics/` から本フォルダへ統合。`oban-builder.html` は元 `OBAN_BUILDER/` から**ルート直下へフラット化**したため、SPEC_06/07 中の `OBAN_BUILDER/oban-builder.html` という記述は本フォルダでは `oban-builder.html` に読み替える。
+- LP 個別プロジェクト（SCROLL_*_LP 等）や AP 非関連の SPEC_02/03/04 は `_済/` に退避済み。

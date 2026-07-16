@@ -240,10 +240,11 @@ input[type=number]{-moz-appearance:textfield;}
 .webx-row.disabled label{color:rgba(255,255,255,0.22);}
 
 /* SATSUEI FX MODAL (SPEC_06) — 既存 #fx-hud(トランスフォーム)とは別物なので sfx- プレフィックス */
-#sfx-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:110;align-items:center;justify-content:center;}
-#sfx-modal.show{display:flex;}
-#sfx-panel{background:#0a0a0c;border:1px solid rgba(255,79,168,0.45);width:410px;max-height:84vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.7);}
-#sfx-head{padding:8px 14px;border-bottom:1px solid rgba(255,79,168,0.18);color:var(--acid);font-size:9px;letter-spacing:0.32em;background:linear-gradient(90deg,rgba(255,79,168,0.08),transparent);display:flex;justify-content:space-between;align-items:center;}
+/* フローティングパネル（INSPECTOR方式・makeFloatDragでヘッダドラッグ）— 画を見ながら調整できるよう非モーダル */
+#sfx-modal{display:none;position:fixed;top:64px;right:24px;z-index:115;}
+#sfx-modal.show{display:block;}
+#sfx-panel{background:rgba(10,10,12,0.94);border:1px solid rgba(255,79,168,0.45);width:340px;max-height:84vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+#sfx-head{padding:8px 14px;border-bottom:1px solid rgba(255,79,168,0.18);color:var(--acid);font-size:9px;letter-spacing:0.32em;background:linear-gradient(90deg,rgba(255,79,168,0.08),transparent);display:flex;justify-content:space-between;align-items:center;cursor:move;user-select:none;}
 #sfx-close{cursor:pointer;color:rgba(255,255,255,0.4);font-size:12px;line-height:1;padding:0 2px;}
 #sfx-close:hover{color:var(--acid);}
 #sfx-body{padding:10px 14px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-family:var(--mono);}
@@ -853,6 +854,9 @@ function createSatsueiFX(opts){
     resize(w, h);
     info = info || {};
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    /* ストレートαのキワ荒れ対策: 乗算済み(premultiplied)でアップロード。半透明エッジの
+       RGB増幅（AEストレート書き出し様のハロー/リング）を防ぐ。不透明ソースには影響なし */
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
     let cur = srcTex, curIsPing = false;
@@ -2491,7 +2495,7 @@ function sfxChanged(){ if(gFxPreview) drawCurrentFrame(); } // undo対象外（S
 function closeSfxModal(){ $('#sfx-modal').classList.remove('show'); }
 $('#btn-fx').addEventListener('click',()=>{ buildSfxUI(); $('#sfx-modal').classList.add('show'); });
 $('#sfx-close').addEventListener('click',closeSfxModal);
-$('#sfx-modal').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeSfxModal(); });
+makeFloatDrag($('#sfx-modal'), $('#sfx-head'), t=>t.id==='sfx-close'); // フローティング（INSPECTOR/FX HUDと同じ）
 $('#btn-fx-preview').addEventListener('click',()=>{
   gFxPreview=!gFxPreview;
   $('#btn-fx-preview').classList.toggle('primary',gFxPreview);

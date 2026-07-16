@@ -442,6 +442,9 @@ function createSatsueiFX(opts){
     resize(w, h);
     info = info || {};
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    /* ストレートαのキワ荒れ対策: 乗算済み(premultiplied)でアップロード。半透明エッジの
+       RGB増幅（AEストレート書き出し様のハロー/リング）を防ぐ。不透明ソースには影響なし */
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
     let cur = srcTex, curIsPing = false;
@@ -1575,6 +1578,7 @@ function frame(nowMs){
     const cam={x:camAt(Pd).x+mx*0.01,y:camAt(Pd).y+my*0.008,z:camAt(Pd).z};
     const W=cv.width,H=cv.height;
     cx.clearRect(0,0,W,H);
+    if(FXP&&FXP.enabled&&gfx.available){cx.fillStyle='#0c061d';cx.fillRect(0,0,W,H);}   // FX時は不透明化（αキワ荒れ対策）
     const items=[].concat(PROJ.panels.filter(p=>!p.parent),PROJ.frames||[]).sort(bySort);
     for(const o of items){
       let R=rect(o,cam,W,H);
@@ -1640,6 +1644,7 @@ function frame(nowMs){
   const useFx=PV.on&&fxp&&fxp.enabled&&gFxOK();
   if(useFx){ensureSc(W,H);cx=gScx;}else cx=cx0;
   cx.clearRect(0,0,W,H);
+  if(useFx){cx.fillStyle='#0c061d';cx.fillRect(0,0,W,H);}   // FX時は不透明化（αキワ荒れ対策）
   grid(cam);
   renderWorld(cam,tS,P);
   if(useFx){

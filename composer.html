@@ -1372,6 +1372,11 @@ function parseTrackFromJSON(json){
         .map(m=>({frame:m.frame|0,label:String(m.label||'')}));
     }
   }
+  // SPEC_06 P3: カメラだけのJSON（OBANコンバータ等）でもKF範囲からタイムライン長を確保
+  if(isCam){
+    const last=Math.max(0,...ALL_PROPS.map(p=>{const a=track.keyframes[p];return a.length?a[a.length-1].f:0;}));
+    if(last>0) track.totalFrames=last+1;
+  }
   return track;
 }
 
@@ -1421,6 +1426,7 @@ function importJSON(json){
     const parsed=json.tracks.map(t=>parseTrackFromJSON(t)).filter(Boolean);
     if(!parsed.length){ alert('有効なトラックがありません'); return; }
     if(!state.width){ state.fps=24; state.width=json.width||json.tracks[0].width; state.height=json.height||json.tracks[0].height; state.bgBright=json.bgBright??100; }
+    if(json.fx) state.fx=normalizeFx(json.fx); // SPEC_06 P3: fx付きJSON（OBAN take.fx等）の追加IMPORTで撮設定を引き継ぐ
     parsed.forEach(t=>state.tracks.push(t));
     finishImport();
     return;

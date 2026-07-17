@@ -184,6 +184,29 @@ body.fxopen #fx-modal{display:flex;flex-direction:column}
 #fx-body .fx-row .v{width:4em;text-align:right;font-variant-numeric:tabular-nums;color:var(--ice)}
 #fx-body input[type=checkbox]{accent-color:var(--amber)}
 
+/* ---------- COPY FOR COMPOSER modal (SPEC_06 P3 — TAKE系=ice) ---------- */
+#cvt-modal{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:75;display:none;width:320px;
+  border:1px solid rgba(90,233,255,.5);background:rgba(16,7,34,.97);
+  box-shadow:0 8px 40px rgba(0,0,0,.6),0 0 24px rgba(90,233,255,.08);
+  font-size:10px;letter-spacing:.12em;font-family:var(--mono);
+}
+body.cvtopen #cvt-modal{display:block}
+#cvt-head{padding:10px 12px;border-bottom:1px solid rgba(90,233,255,.35);color:var(--ice);font-family:var(--bank);letter-spacing:.2em}
+#cvt-head .btn{float:right;border-color:rgba(90,233,255,.45);color:var(--ice);padding:3px 8px}
+#cvt-head .btn:hover{background:rgba(90,233,255,.14);border-color:var(--ice);color:var(--ice)}
+#cvt-head .cvt-note{clear:both;font-family:var(--jp);letter-spacing:.03em;opacity:.5;margin-top:6px;line-height:1.6}
+#cvt-body{padding:10px 12px}
+#cvt-body .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+#cvt-body .row .k{width:7em;flex:none;opacity:.65}
+#cvt-body input[type=number]{
+  flex:1;background:rgba(90,233,255,.06);border:1px solid rgba(90,233,255,.3);color:var(--ice);
+  font-family:var(--mono);font-size:11px;padding:4px 6px;outline:none;
+}
+#cvt-body .cvt-note{font-family:var(--jp);letter-spacing:.03em;opacity:.5;margin:8px 0;line-height:1.6}
+#cvt-body #cvt-copy{display:block;width:100%;margin-top:4px;border-color:rgba(90,233,255,.45);color:var(--ice)}
+#cvt-body #cvt-copy:hover{background:rgba(90,233,255,.14);border-color:var(--ice)}
+
 </style>
 </head>
 <body class="place">
@@ -198,6 +221,7 @@ body.fxopen #fx-modal{display:flex;flex-direction:column}
   <button class="btn ex" id="b-export">3. EXPORT ▸ HTML</button>
   <span style="width:14px"></span>
   <button class="btn" id="b-copy">COPY PROJ</button>
+  <button class="btn" id="b-comp">COPY FOR COMPOSER</button>
   <button class="btn" id="b-paste">PASTE PROJ</button>
   <button class="btn" id="b-clear">CLEAR</button>
   <button class="btn" id="b-guide">GUIDE [G]</button>
@@ -223,6 +247,20 @@ body.fxopen #fx-modal{display:flex;flex-direction:column}
   <div id="fx-head"><span>SATSUEI FX — take.fx <b>[rt]</b></span><button class="btn" id="fx-close">✕ [Esc]</button>
     <div class="fx-note">プレビュー(SPACE)と書き出しビューアに適用。編集中はOFF（軽量優先）</div></div>
   <div id="fx-body"></div>
+</div>
+
+<!-- ==================== COPY FOR COMPOSER MODAL (SPEC_06 P3) ==================== -->
+<div id="cvt-modal">
+  <div id="cvt-head"><span>COPY FOR COMPOSER</span><button class="btn" id="cvt-close">✕ [Esc]</button>
+    <div class="cvt-note">TAKEをcomposerのCAMERAトラックJSONへ変換してコピー。パネルの絵はcomposer側で別途IMPORT。</div></div>
+  <div id="cvt-body">
+    <div class="row"><span class="k">FPS</span><input type="number" id="cvt-fps" value="24" min="1" max="120" step="1"></div>
+    <div class="row"><span class="k">尺（秒）</span><input type="number" id="cvt-sec" value="6" min="0.5" step="0.5"></div>
+    <div class="row"><span class="k">COMP W</span><input type="number" id="cvt-w" value="1920" min="16" step="1"></div>
+    <div class="row"><span class="k">COMP H</span><input type="number" id="cvt-h" value="1080" min="16" step="1"></div>
+    <div class="cvt-note">W/H は composer のコンポ解像度に合わせる（カメラ位置を px に換算するため）。take.fx も一緒にコピーされる。</div>
+    <button class="btn" id="cvt-copy">COPY JSON</button>
+  </div>
 </div>
 
 <script id="satsuei-core">
@@ -1322,8 +1360,9 @@ addEventListener('keydown',e=>{
   else if(e.key==='f'||e.key==='F')toggleFxModal();                  // V2-C
   else if(e.key==='g'||e.key==='G')toggleGuides();
   else if((e.key==='Delete'||e.key==='Backspace')&&mode==='place'&&sel)deleteSel();
-  else if(e.key==='Escape'){   // カスケード FXモーダル→マスク→フレーム内→選択解除→プレビュー
-    if(document.body.classList.contains('fxopen'))toggleFxModal();
+  else if(e.key==='Escape'){   // カスケード コンバータ→FXモーダル→マスク→フレーム内→選択解除→プレビュー
+    if(document.body.classList.contains('cvtopen'))toggleCvtModal();
+    else if(document.body.classList.contains('fxopen'))toggleFxModal();
     else if(maskEdit.on)toggleMask();
     else if(ctxFrame)exitFrame();
     else if(sel){sel=null;renderChip();}
@@ -1382,6 +1421,60 @@ function buildFxUI(){
 {
   const bf=$('#b-fx');if(bf)bf.addEventListener('click',toggleFxModal);
   const fc=$('#fx-close');if(fc)fc.addEventListener('click',toggleFxModal);
+}
+
+/* ============================================================
+   SPEC_06 P3: COPY FOR COMPOSER — TAKE→composer CAMERAトラックJSON
+   MVP=カメラだけ変換（絵はcomposer側で別途IMPORT）。値の写像はSPEC_06 §8:
+   X=x*Wc / Y=y*Hc / SCL=z（案A: 光学ズーム。depth別視差は失われる）
+   ============================================================ */
+function ezOfEase(ease){
+  // composerのezはsmoothstepブレンド量（0=リニア/0.5=中/1=最大）への近似写像
+  return {linear:0,smooth:0.5,inout:1,outCubic:0.5,inCubic:0.5}[ease]??0.5;
+}
+function buildComposerJSON(fps,secs,Wc,Hc){
+  const T=buildTake(PROJECT.take);
+  const total=Math.max(2,Math.round(fps*secs));   // フレーム数（composerは0始まり）
+  const last=total-1;                              // P=0..1 → f=0..last
+  const kx=[],ky=[],ks=[];
+  const push=(arr,f,v,ez)=>{if(!arr.some(k=>k.frame===f))arr.push({frame:f,v,ez});};   // 先勝ち（travel終端のezを保持）
+  const key=(f,c,ez)=>{
+    push(kx,f,+(c.x*Wc).toFixed(2),ez);
+    push(ky,f,+(c.y*Hc).toFixed(2),ez);
+    push(ks,f,+clamp(c.z??1,0.25,4).toFixed(4),ez);   // camAtと同じzクランプ
+  };
+  for(const s of T.segs){
+    const f0=Math.round(s.p0*last),f1=Math.round(s.p1*last);
+    if(s.t==='dwell'){key(f0,s.a,0);if(f1>f0)key(f1,s.a,0);}   // 同値キー2枚=ホールド
+    else key(f1,s.b,ezOfEase(s.ease));                          // travel: 終端キーにease写像
+  }
+  return {
+    format:'PROJECT_v2',width:Wc,height:Hc,
+    fx:PROJECT.take.fx||undefined,   // スキーマ共通なので変換不要（SPEC_06 §8-4）
+    tracks:[{type:'camera',name:(PROJECT.take.name||'OBAN CAM'),visible:true,
+      composer:{keyframes:{x:kx,y:ky,s:ks}}}]
+  };
+}
+function toggleCvtModal(){
+  const open=!document.body.classList.contains('cvtopen');
+  if(open&&!PROJECT.take.kf.length){toast('KFがまだありません — TAKEモードで C=CAPTURE');return;}
+  document.body.classList.toggle('cvtopen',open);
+  if(open){const s=$('#cvt-sec');if(s)s.value=Math.max(0.5,Math.round((TT.total||1)*10)/10);}   // 既定尺=TAKE重み合計
+}
+async function copyForComposer(){
+  const fps=clamp(Math.round(parseFloat($('#cvt-fps').value)||24),1,120);
+  const sec=Math.max(0.1,parseFloat($('#cvt-sec').value)||TT.total||1);
+  const W=Math.max(16,Math.round(parseFloat($('#cvt-w').value)||1920));
+  const H=Math.max(16,Math.round(parseFloat($('#cvt-h').value)||1080));
+  const j=JSON.stringify(buildComposerJSON(fps,sec,W,H));
+  try{await navigator.clipboard.writeText(j);toast('COMPOSER用 CAMERAトラックJSONをコピー — composerの IMPORT JSON に貼り付け');}
+  catch(e){window.prompt('COPY FOR COMPOSER JSON:',j);}
+  document.body.classList.remove('cvtopen');
+}
+{
+  const bc=$('#b-comp');if(bc)bc.addEventListener('click',toggleCvtModal);
+  const cc=$('#cvt-close');if(cc)cc.addEventListener('click',toggleCvtModal);
+  const cp=$('#cvt-copy');if(cp)cp.addEventListener('click',copyForComposer);
 }
 
 /* ---------- project copy/paste/clear ---------- */

@@ -25,6 +25,7 @@ ANIMATORの作画コマを複数トラックで重ね、トランスフォーム
 - importJSON(json)：空なら新規読込、既存があれば「追加」。複数回で2つ3つと重ねられる
 - PROJECT_v2=loadJSON（全置換 or 追加）、PROJECT_v1/ANIMATOR_v1=単一トラック追加
 - finishImport()が共通の後処理（totalFrames/workArea/UI再構築/announceLive）
+- SPEC_06 P3受け（OBANの COPY FOR COMPOSER 用）: ①カメラだけのPROJECT_v2でもKF最終フレームから totalFrames を確保（parseTrackFromJSON）②追加IMPORTでも `fx:` があれば normalizeFx で state.fx を引き継ぐ。既存CAMERAがある状態で貼るとカメラは捨てられる（dedupeCameras=既存優先）
 - ドラッグ&ドロップ対応（JSON / audio両対応）
 
 ■ レンダリング（drawOneTrack）

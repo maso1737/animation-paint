@@ -53,6 +53,13 @@
 - **絶対条件の遵守**: `enabled:false`はapply未呼び出し経路・WebGL不可は素通し（`gfx.available`）・ビューア`?fx=0`で強制OFF・コアにバッククォート/`</script>`文字列なし（検証スクリプトがチェック）
 - ビューアはシーンを常時オフスクリーン`sc`に描き→FX→可視`cv`へ（fx OFF時も同経路のblitのみ＝ピクセル一致）
 
+### COPY FOR COMPOSER（SPEC_06 P3 — TAKE→composer CAMERAトラック変換・2026-07実装済み）
+- バーの `COPY FOR COMPOSER` ボタン→ice配色モーダル（FPS/尺秒/COMP W/H）→ PROJECT_v2互換JSONをクリップボードへ → composerの IMPORT JSON に貼る。**MVP=カメラだけ変換**（絵はcomposer側で別途IMPORT。全自動化はP3b検討）
+- 実装: `buildComposerJSON()` / `toggleCvtModal()` / `copyForComposer()`。尺の既定値=`TT.total`（dwell/travel重み合計≒秒）
+- 写像（SPEC_06 §8）: `X=x*Wc / Y=y*Hc / SCL=z（案A: 光学ズーム。depth別視差は落ちる）`。dwell=同値キー2枚ホールド、travel=終端キーに `ez`（linear→0/smooth→0.5/inout→1/in・outCubic→0.5）。P∈[0,1]→f=round(P*(fps*秒-1))。同一フレーム衝突は先勝ち＝travel終端のezを保持
+- `take.fx` はトップレベル `fx:` にそのまま同梱（スキーマ共通・無変換）
+- composer側の受け（P3対応で追加）: ①カメラだけのJSONでもKF範囲から `totalFrames` が立つ ②既存トラックへの追加IMPORTでも `fx:` があれば `normalizeFx` で引き継ぐ。**composerに既にCAMERAがあると貼ったカメラは捨てられる**（カメラは1つまで＝既存優先）ので、先にCAMERAを消してから貼る
+
 ## データモデル
 
 ```js

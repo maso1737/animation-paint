@@ -7216,6 +7216,28 @@ window.addEventListener('resize', () => {
   applyRefMaster();    // REF表示マスター（パネル連動）を反映
   applyRefImgUI();     // 参照画像UIを反映
   updateInkSwatches(); // 下書/指示インクのカスタム色をボタンへ反映
+  // SPEC_07 B3: OBANの EDIT IN ANIMATOR（?open=<projectId>）— LIVEを自動ONにして即ブロードキャスト。
+  // autosaveが同一プロジェクトならそのまま、違えば EXCHANGE DB から確認つきで読込（無断上書きしない）
+  const openId = new URLSearchParams(location.search).get('open');
+  if(openId){
+    try{
+      if(state.projectId !== openId){
+        const rec = await exGet(openId);
+        if(rec){
+          if(await modalConfirm('OBANからの編集リクエスト:\n現在のプロジェクトを閉じて、対象プロジェクトを開きますか？')){
+            await applyProjectJSON(rec);
+          }
+        } else {
+          await modalAlert('該当プロジェクトが見つかりません。\nプロジェクトを開いて LIVE を押すとOBANと同期します。');
+        }
+      }
+      if(state.projectId === openId){
+        gLiveActive = true; updateLiveUI();
+        broadcastProjectNow();
+      }
+      history.replaceState(null,'','animator.html');
+    }catch(e){ console.warn('open param failed', e); }
+  }
 })();
 
 // ページ離脱前に強制保存

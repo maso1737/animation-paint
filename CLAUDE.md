@@ -31,6 +31,14 @@
 GitHub: https://github.com/maso1737/animation-paint
 Pages: https://maso1737.github.io/animation-paint/
 
+## 残タスク・予定タスク一覧（Claude Artifact）
+
+https://claude.ai/code/artifact/a57e3c0b-064f-4e1b-97d2-a158602ab07b
+
+各SPEC/HANDOVERを横断した「まだ終わっていないもの」の棚卸しページ。
+**新チャットでこのページを更新するときは、必ず上のURLを Artifact ツールの `url` に渡すこと**
+（渡さずに新規publishすると別URLが発行され、ここのリンクが古くなる）。
+
 ## 変更後に必ず行うチェック
 ```
 node tools/check.js

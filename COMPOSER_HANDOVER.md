@@ -137,6 +137,9 @@ ANIMATORの作画コマを複数トラックで重ね、トランスフォーム
 - drawOneTrack(ctx,w,h,frame,track,hasSolo) 第6引数hasSolo必須
 - SOLOボタンは el.querySelectorAll('.tl-tbtn')[1]
 - 確認ダイアログ(confirm)は全廃方針
+- CAMERAは常に state.tracks 末尾＝タイムライン最上段に固定（`pinCameraTop()`、rebuildAllTrackUI冒頭で強制）。合成順は getCamAt が別管理なので配列位置は表示専用。camera はドラッグ並び替え不可
+- カメラの親(NULL)は行内 `.tl-parent-sel`（削除ボタン左）とインスペクタ #kf-parent の両方から設定可。両者は `refreshTrackChainMarks` で同期
+- undo対象のトラック編集データ(cloneEditState/applyHistory の perTrack)は keyframes/markers/parent/visible/solo/**name**。トラック行の新プロパティを undo させたいときはこの2箇所に追加
 
 【未実装 / 将来候補】
 - FRAME参照画像（複数ANIMATOR参照）

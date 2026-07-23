@@ -2,6 +2,7 @@
 
 対象: `composer.html`（単一HTML）。2026-07 の Phase 5/6 実装（influence/ミニグラフ/NULL/カメラ親/子Z/AE JSX）の続き。
 発注者の優先順位: **P0 → P1/P1b →** それ以降は独立タスクとして任意の順。
+**2026-07-23 追加の割り込み最優先: P5（CAMERA / トラック行の操作性バグ5件）。P2 以降より先に着手。**
 
 ## 0. 実装者（Opus）への共通規約 — 全フェーズ共通・必読
 
@@ -212,8 +213,94 @@ function cloneEditState(){
 
 ---
 
+## P5: CAMERA & トラック行の操作性修正【割り込み最優先・2026-07-23】
+
+発注者報告の5件。CAMERA トラックまわりの選択・親子・並び替え・改名の使い勝手/退行バグ。
+**独立に着手可だが P5-2 と P5-5 は親子・並び順の両方を触るので同一コミット推奨。** 各件に動作チェック表を付ける。
+
+### P5-1: 選択トラックのフォーカスを分かりやすく
+
+**症状**: いまどのトラックを選択中か分かりづらい。特に CAMERA 行。
+
+**原因**: 選択強調が淡すぎる。`.tl-track.selected` は `background:rgba(255,79,168,0.04)` ＋ name を acid 色にするだけ（composer.html:117-118）。CAMERA 行は `.tl-cam` が ice 系背景 `rgba(90,233,255,0.03)` を当てている（:368-369）ため、選択時の淡いピンクがほぼ埋もれて見えない。
+
+**修正**:
+1. `.tl-track.selected` に**明示的な左インセットボーダー**を追加し、地色も濃く:
+   `.tl-track.selected{background:rgba(255,79,168,0.10);box-shadow:inset 3px 0 0 var(--acid);}`
+2. CAMERA 選択は ice を保ったまま分かるよう `.tl-track.tl-cam.selected{background:rgba(90,233,255,0.10);box-shadow:inset 3px 0 0 var(--ice);}` を別途用意（`.tl-cam` の後に定義して優先させる）。
+3. `selectTrack`（:1838）は既に `.selected` を付け替えるだけなので CSS 追加で足りる。ラベルの num（🎥/◇/番号）や name 発光も selected 時に一段強めると更に良い（任意）。
+
+**受け入れ基準**: 通常 / CAMERA / NULL いずれの行でも、選択が枠 or 明確な地色差で一目で分かる。
+
+### P5-2: CAMERA 行に親（NULL）プルダウンを追加＋カメラ親リンクが解除されるバグ修正
+
+**要望**: CAMERA トラックの削除（✕）ボタンの横に、親（NULL）選択プルダウンを出す。行を見ただけで親子関係が分かるように。
+
+**バグ**: 現状 CAMERA→NULL のリンクを張っても解除されてしまう。
+**原因**: インスペクタの `#kf-parent` change ハンドラ（:3778-3780）が `const t=selTrack(); if(!t||t.type==='camera') return;` で**カメラを早期リターン**している。そのためカメラの `parent` はインスペクタからは設定・維持できず、`updateParentSelect`（:1815。カメラには NULL のみ候補提示：1824）が表示はしても書き戻し経路が無く、選択が反映されない／リセット表示になる。
+一方 `getCamAt`（:2857-2858）は `camT.parent` のチェーンを実際に加算合成に使う＝**カメラ親は本来有効な機能**。書き込み側だけが欠けている。
+
+**修正**:
+1. `buildTrackElement`（:1956）の CAMERA 行（`track.type==='camera'`）に、`delBtn` の**前**へ小型 `<select class="tl-parent-sel">` を追加。
+   - 選択肢: `NONE` ＋ 全 NULL トラック（`state.tracks.filter(t=>t.type==='null')`）のラベル/tid。
+   - 初期値 `track.parent||''`。change で `track.parent=this.value||null; recordHistory(); rebuildAllTrackUI(); drawCurrentFrame();`。
+   - カメラ行は SOLO/PNG/ANI/Re が付かない（:2092-2093）ので横幅に空きがある。それでも HANDOVER の**ボタン列 128px 制限**に注意し、font-size 9px の小型セレクトにする。
+2. インスペクタ側 `#kf-parent` change ハンドラのカメラ早期リターンを撤廃（またはカメラも許可し、候補が NULL のみになる既存 `updateParentSelect` に委ねる）。両 UI が同じ `track.parent` を読み書きする形に統一。
+3. **解除される経路を塞ぐ**: `sanitizeParents`（:1732）/`dedupeCameras`/`doTrackReorder`/undo を通ってもカメラ `parent` が保持されること。P1b の perTrack スナップは `parent` を持つので undo は OK。`updateParentSelect` の「参照切れガード」（:1834）がカメラの正当な親まで空に落としていないか要確認。
+
+**受け入れ基準**: カメラ行のプルダウンで NULL を選ぶ→⛓/親表示が付き、`getCamAt` でカメラが NULL の移動に追従（加算合成）→**リロード / undo / 並び替え後もリンクが維持**される。インスペクタとカメラ行の表示が常に一致。
+
+### P5-3: トラック上下入れ替え中にゴーストが張り付いて止まる
+
+**症状**: CAMERA（他トラックでも）をドラッグで並び替え中、ドラッグゴーストの表示が張り付いたまま残り、操作が止まったように見える。
+
+**原因候補**: ドラッグゴースト `dhGhost` は `document.body` 直下に生成される（`dhBegin`:1975-1980）ため、`doTrackReorder`（:1932）→`rebuildAllTrackUI`（:2161, container.innerHTML=''）で行 el を作り直しても**ゴーストは孤児として残る**。cleanup は `pointerup`/`pointercancel` で `dhCleanup`（:1984）を呼ぶ設計だが、途中で pointer capture が外れる／pointerup が別ノードで発火する／例外が挟まると `dhGhost` と `#tl-drop-indicator` が残留する。
+
+**修正**:
+1. `attachTrackDrag` の pointerup ハンドラ（:2008-2013）を `try{ ... }finally{ dhCleanup(); }` にして、reorder 実行の成否に関わらず cleanup を保証。cleanup→reorder の順序も維持。
+2. `pointercancel` に加え `lostpointercapture` でも `dhCleanup` を呼ぶ。
+3. **安全網**: `rebuildAllTrackUI` 冒頭で、浮いている `.tl-drag-ghost` と `#tl-drop-indicator` を明示除去（`document.querySelectorAll('.tl-drag-ghost').forEach(n=>n.remove())`）。
+4. 再現確認: カメラを最上→最下／最下→最上へ動かすケースを含めて数回。
+
+**受け入れ基準**: 何度並び替えてもゴースト／ドロップインジケータが画面に残らない。
+
+### P5-4: トラック名のダブルクリック改名が効かない（退行）
+
+**症状**: ラベルの W クリック（ダブルクリック）で名前を変更できなくなっている。
+
+**原因候補**: ラベル全体に並び替えドラッグを付けた `attachTrackDrag(label,false)`（:2099）が、label の pointerdown で `setPointerCapture`（:2000）する。これにより 2 クリック目の pointer 系イベントが label にキャプチャされ、`nameEl` の `dblclick`（:2031）が発火しない／input に focus できない可能性。加えて改名 commit（:2039-2043）は `track.name` を書くだけで `recordHistory()` を呼んでおらず、rebuild で戻る懸念。
+
+**修正**:
+1. pointer capture と改名を両立させる。案: `attachTrackDrag` の非immediate経路で **pointerdown時に即 capture せず**、`dhBegin`（4px 移動でドラッグ確定）した時点で初めて `setPointerCapture` する。こうすれば単純クリック/ダブルクリックは capture されず dblclik が通る。
+2. それでも `nameEl` の dblclick を確実にするため、`nameEl` 上のドラッグ開始条件を厳しく（改名 input 表示中・ダブルクリック直後は drag pending を張らない）。
+3. commit（:2039）に `recordHistory()` を追加し、改名を undo 対象＆自動保存対象にする。
+4. 実機で W クリック→input 出現→Enter/blur 確定→rebuild 後も名前維持を確認。
+
+**受け入れ基準**: W クリックで即入力欄が出て、確定で反映＆保存され、undo で戻せる。並び替えドラッグも従来どおり機能（両立）。
+
+### P5-5: CAMERA は常に最上・AUDIO は常に最下に固定
+
+**要望**: AUDIO は常に一番下、CAMERA は常に一番上でよい。
+
+**現状**: `rebuildAllTrackUI`（:2161-2173）は `tracks[N-1]→[0]` を上から積み、audioRow を最後に append するので **AUDIO は既に最下**。一方 CAMERA は `state.tracks` 配列内の位置しだいで、`doTrackReorder` で上下に動いてしまう。
+
+**修正（表示順のみ固定＝合成ロジックに触れない安全策）**:
+1. **CAMERA を UI 最上に固定**: `rebuildAllTrackUI` の描画ループで、camera トラックを常に最初に append（＝一番上）し、残りを従来順で積む。`state.tracks` 配列の順序自体は変えない（`getCamAt`/`drawFrame` の合成順に影響させない）。
+2. **camera はドラッグ並び替えの対象外**にする: `buildTrackElement` で camera 行はドラッグハンドルを無効化（`attachTrackDrag` を付けない or `dragHandle` 非表示）。
+3. `doTrackReorder`（:1932）で、非カメラを動かしたとき **camera の UI 位置（最上）を越えないよう insertIdx をクランプ**（表示固定と矛盾しないよう、実質は camera を常に配列末尾扱いにするか、描画側 (1) で吸収）。
+4. AUDIO は現状維持（最下）と明記。
+
+**受け入れ基準**: どう並び替えても CAMERA は最上・AUDIO は最下から動かない。カメラの合成結果（カメラワーク）は従来どおり。
+
+---
+
 ## 進捗
 
+- [x] **P5-1 選択フォーカス強調**（2026-07-23。`.tl-track.selected` に acid の左インセットバー＋地色0.10、`.tl-cam.selected` は ice バー＋0.12。バーは box-shadow でトランジション無し＝即時表示）
+- [x] **P5-2 CAMERA行の親プルダウン＋親リンク保持**（2026-07-23。`buildTrackElement` の camera 行に `.tl-parent-sel`（削除ボタン左）。`#kf-parent` change のカメラ早期returnを撤廃。`refreshTrackChainMarks` で両UI同期。rebuild/reorder後もリンク維持を実機確認）
+- [x] **P5-3 並び替えゴースト張り付き**（2026-07-23。pointerup を try/finally で必ず `dhCleanup`、`lostpointercapture` でも掃除、`rebuildAllTrackUI` 冒頭で孤児 `.tl-drag-ghost` 除去）
+- [x] **P5-4 トラック名Wクリック改名**（2026-07-23。ラベルの `attachTrackDrag` は4px移動でドラッグ確定した時のみ setPointerCapture＝dblclick と両立。commit に recordHistory＋done ガード。**cloneEditState/applyHistory の perTrack に `name` を追加**して改名を undo/redo 対象に）
+- [x] **P5-5 CAMERA最上・AUDIO最下の固定**（2026-07-23。`pinCameraTop()` で camera を配列末尾＝UI最上に固定〔合成は getCamAt 別管理なので配列位置は表示専用〕。camera はドラッグ不可、`doTrackReorder` は他トラックが camera を越えないようクランプ。AUDIOは従来どおり最下）
 - [x] P0 座標ずれ修正（2026-07-19。frameFrac統一・グラフのtotal-1バグ修正・scrollbar非表示CSS）
 - [x] P1 自動保存（2026-07-19。cells/meta分離・復元バーはLIVE先行ロードより優先＝置き換えセマンティクス・✕=温存で閉じる・⚙にCLEAR）
 - [x] P1b トラックundo（2026-07-19。trackRefs+perTrack(tid引き当て)方式。削除/並び替え/◉/SOLO/WAがundo対象に。applyHistoryはrebuildAllTrackUI）

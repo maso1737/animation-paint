@@ -103,16 +103,27 @@ canvas#cv{position:fixed;inset:0;width:100%;height:100%;display:block}
 #crumb .btn{margin-left:6px}
 
 /* ---------- KF cards (TAKE = ice) ---------- */
+/* TAKE カメラKFパネル：animator の REF/設定パネルと同じフローティング（ヘッダで移動・下端で高さ調整） */
 #cards{
-  position:fixed;right:14px;top:88px;bottom:96px;width:min(300px,30vw);z-index:40;display:none;
-  overflow-y:auto;border:1px solid var(--border-bright);background:rgba(16,7,34,.96);
+  position:fixed;right:14px;top:88px;width:min(300px,30vw);z-index:40;display:none;
+  border:1px solid var(--border-bright);background:rgba(16,7,34,.96);
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   box-shadow:0 8px 40px rgba(0,0,0,.6),0 0 24px rgba(90,233,255,.06);
-  padding:11px 12px;font-size:10px;letter-spacing:.1em;
+  font-size:10px;letter-spacing:.1em;
 }
-#cards::-webkit-scrollbar{width:4px}
-#cards::-webkit-scrollbar-thumb{background:rgba(90,233,255,.35)}
-body.take #cards{display:block}
+#cards-head{
+  display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none;
+  padding:8px 12px;border-bottom:1px solid var(--border);
+  background:linear-gradient(90deg,rgba(90,233,255,.10),transparent);
+  color:var(--ice);letter-spacing:.28em;font-family:var(--bank);
+}
+#cards-head .drag-hint{opacity:.4;font-size:8px;letter-spacing:.2em}
+#cards-body{overflow-y:auto;max-height:60vh;padding:11px 12px}
+#cards-body::-webkit-scrollbar{width:4px}
+#cards-body::-webkit-scrollbar-thumb{background:rgba(90,233,255,.35)}
+#cards-resize,#fx-resize{height:11px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;border-top:1px solid var(--border);background:rgba(255,255,255,.02)}
+#cards-resize::after,#fx-resize::after{content:'';width:28px;height:2px;background:rgba(255,255,255,.25)}
+body.take #cards{display:flex;flex-direction:column}
 .edc{border-bottom:1px dashed rgba(90,233,255,.22);padding:8px 0}
 .edc-h b{color:var(--ice);text-shadow:0 0 6px rgba(90,233,255,.35)}
 .edc label{display:block;margin-top:5px;opacity:.8;letter-spacing:.08em}
@@ -159,19 +170,19 @@ body.dragover #drop{outline:2px dashed var(--acid);outline-offset:-24px}
 
 /* ---------- SATSUEI FX modal (V2-C — 撮影系=琥珀/amber) ---------- */
 #fx-modal{
-  position:fixed;right:14px;top:88px;bottom:16px;width:min(340px,34vw);z-index:70;display:none;
+  position:fixed;right:14px;top:88px;width:min(340px,34vw);z-index:70;display:none;
   border:1px solid rgba(255,201,79,.5);background:rgba(16,7,34,.97);
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   box-shadow:0 8px 40px rgba(0,0,0,.6),0 0 24px rgba(255,201,79,.08);
   font-size:10px;letter-spacing:.12em;overflow:hidden;
 }
 body.fxopen #fx-modal{display:flex;flex-direction:column}
-#fx-head{padding:10px 12px;border-bottom:1px solid rgba(255,201,79,.35);color:var(--amber);font-family:var(--bank);letter-spacing:.2em}
+#fx-head{padding:10px 12px;border-bottom:1px solid rgba(255,201,79,.35);color:var(--amber);font-family:var(--bank);letter-spacing:.2em;cursor:move;user-select:none}
 #fx-head b{font-weight:400;opacity:.7}
 #fx-head .btn{float:right;border-color:rgba(255,201,79,.45);color:var(--amber);padding:3px 8px}
 #fx-head .btn:hover{background:rgba(255,201,79,.14);border-color:var(--amber);color:var(--amber)}
 #fx-head .fx-note{clear:both;font-family:var(--jp);letter-spacing:.03em;opacity:.5;margin-top:6px;line-height:1.6}
-#fx-body{flex:1;overflow-y:auto;padding:10px 12px}
+#fx-body{max-height:60vh;overflow-y:auto;padding:10px 12px}
 #fx-body::-webkit-scrollbar{width:4px}
 #fx-body::-webkit-scrollbar-thumb{background:rgba(255,201,79,.35)}
 #fx-body label{display:block;margin:6px 0;cursor:pointer}
@@ -254,24 +265,30 @@ body.textarm #cv{cursor:crosshair}
 
 <div id="bar">
   <span class="title">OBAN <b>BUILDER</b></span>
-  <button class="btn mode on" id="m-place">1. PLACE 配置</button>
-  <button class="btn mode ice" id="m-take">2. TAKE カメラ</button>
-  <button class="btn ex" id="b-export">3. EXPORT ▸ HTML</button>
+  <button class="btn mode on" id="m-place" title="配置モード：画像をコマとして並べる。ドラッグ=移動 / [ ]=前後 / フレームに重ねて格納 / Wクリック=フレーム内へ / M=マスク編集">1. PLACE 配置</button>
+  <button class="btn mode ice" id="m-take" title="カメラモード：スクロールに沿ったカメラワークをキーフレームで打つ。C=CAPTURE / ↑↓=KF移動 / SPACE=PREVIEW">2. TAKE カメラ</button>
+  <button class="btn ex" id="b-export" title="スクロール駆動のモーションコミックを単一HTMLビューアで書き出し（依存ゼロ・画像同梱）">3. EXPORT ▸ HTML</button>
   <span style="width:14px"></span>
-  <button class="btn" id="b-ap">+ FROM ANIMATOR</button>
-  <button class="btn" id="b-copy">COPY PROJ</button>
-  <button class="btn" id="b-comp">COPY FOR COMPOSER</button>
-  <button class="btn" id="b-paste">PASTE PROJ</button>
-  <button class="btn" id="b-clear">CLEAR</button>
-  <button class="btn" id="b-guide">GUIDE [G]</button>
-  <button class="btn mode" id="b-frame">+ FRAME</button>
-  <button class="btn mode" id="b-text">+ TEXT [T]</button>
-  <button class="btn fx" id="b-fx">FX 撮影 [F]</button>
+  <button class="btn" id="b-ap" title="ANIMATORの連番をPNG書き出しなしで取り込み（同一ブラウザ・EX_DB経由。保存で自動同期）">+ FROM ANIMATOR</button>
+  <button class="btn" id="b-comp" title="TAKEをCOMPOSERのCAMERAトラックJSONに変換してコピー（COMPOSER側の + FROM OBAN で貼り付け）">COPY FOR COMPOSER</button>
+  <button class="btn" id="b-export-json" title="プロジェクト全体をJSONファイルで書き出し（メモ帳に貼らずそのまま保存）">EXPORT JSON</button>
+  <button class="btn" id="b-import-json" title="JSONファイルからプロジェクトを読み込み（既存を置換）">IMPORT JSON</button>
+  <input type="file" id="oban-json-input" accept="application/json,.json" style="display:none;">
+  <button class="btn" id="b-clear" title="プロジェクトを空にする（元に戻せません）">CLEAR</button>
+  <button class="btn" id="b-guide" title="ガイド表示 ON/OFF（G）">GUIDE [G]</button>
+  <button class="btn mode" id="b-frame" title="フレーム（コマ枠）を追加。画像を重ねて格納できる">+ FRAME</button>
+  <button class="btn mode" id="b-text" title="縦書きテキストを追加（T）">+ TEXT [T]</button>
+  <button class="btn fx" id="b-fx" title="撮影処理（SATSUEI FX）チェーンを編集（F）。プレビュー・書き出しに適用">FX [F]</button>
   <span id="crumb"></span>
+  <button class="btn" id="b-home" title="ランディングページに戻る" style="margin-left:auto">HOME</button>
   <span id="hint">画像をD&D（連番4枚以上は自動でシーケンス化）。PLACE: ドラッグ=移動 / [ ]=前後 / フレームに重ねて離す=格納 / ダブルクリック=フレーム内へ / M=マスク編集 / T=縦書きテキスト。TAKE: C=CAPTURE / ↑↓=KF移動 / SUB=カードで入力 / SPACE=PREVIEW。G=ガイド / Ctrl+Z・Ctrl+Shift+Z。</span>
 </div>
 
-<div id="cards"></div>
+<div id="cards">
+  <div id="cards-head"><span>TAKE — CAMERA</span><span class="drag-hint">DRAG</span></div>
+  <div id="cards-body"></div>
+  <div id="cards-resize" title="ドラッグで高さ調整"></div>
+</div>
 
 <div id="chip"></div><!-- V2-B: 選択対象(パネル/シーケンス/フレーム)に応じて動的生成 -->
 
@@ -287,6 +304,7 @@ body.textarm #cv{cursor:crosshair}
   <div id="fx-head"><span>SATSUEI FX — take.fx <b>[rt]</b></span><button class="btn" id="fx-close">✕ [Esc]</button>
     <div class="fx-note">プレビュー(SPACE)と書き出しビューアに適用。編集中はOFF（軽量優先）</div></div>
   <div id="fx-body"></div>
+  <div id="fx-resize" title="ドラッグで高さ調整"></div>
 </div>
 
 <!-- ==================== COPY FOR COMPOSER MODAL (SPEC_06 P3) ==================== -->
@@ -1384,8 +1402,9 @@ function toggleGuides(){guides=!guides;try{localStorage.setItem('oban-guides',gu
 
 /* ---------- cards (TAKE) ---------- */
 const cards=$('#cards');
+const cardsBody=$('#cards-body');
 function renderCards(){
-  cards.innerHTML=`<div style="color:var(--ice);letter-spacing:.3em;margin-bottom:8px">TAKE — ${PROJECT.take.kf.length} KF ${selKf>=0?`/ SEL #${pad(selKf)}`:''}</div>`+
+  cardsBody.innerHTML=`<div style="color:var(--ice);letter-spacing:.3em;margin-bottom:8px">TAKE — ${PROJECT.take.kf.length} KF ${selKf>=0?`/ SEL #${pad(selKf)}`:''}</div>`+
     PROJECT.take.kf.map((k,i)=>`
     <div class="edc${i===selKf?' sel':''}" data-i="${i}">
       <div class="edc-h">#${pad(i)} <b>x${(+k.x).toFixed(2)} y${(+k.y).toFixed(2)} z${(+(k.z??1)).toFixed(2)}</b>
@@ -1936,6 +1955,54 @@ function buildClickFxUI(root){
   const fc=$('#fx-close');if(fc)fc.addEventListener('click',toggleFxModal);
 }
 
+/* ---------- フローティングパネル共通（animator 準拠：ヘッダで移動 / 下端で高さ調整） ---------- */
+// ヘッダを掴んで移動。右上寄せ(right:14px)を left/top 絶対指定に切り替えて動かす。
+function makePanelDraggable(panel, head){
+  if(!panel||!head)return;
+  let drag=false,sx=0,sy=0,ox=0,oy=0;
+  head.addEventListener('pointerdown',e=>{
+    if(e.target.closest('button'))return;         // 閉じる等のボタンは掴まない
+    drag=true;
+    const r=panel.getBoundingClientRect();
+    sx=e.clientX;sy=e.clientY;ox=r.left;oy=r.top;
+    panel.style.left=ox+'px';panel.style.top=oy+'px';panel.style.right='auto';
+    head.setPointerCapture(e.pointerId);e.preventDefault();
+  });
+  head.addEventListener('pointermove',e=>{
+    if(!drag)return;
+    // 画面外に出て掴めなくならないよう軽くクランプ
+    const maxX=window.innerWidth-60, maxY=window.innerHeight-40;
+    panel.style.left=Math.max(0-panel.offsetWidth+80,Math.min(maxX,ox+e.clientX-sx))+'px';
+    panel.style.top =Math.max(0,Math.min(maxY,oy+e.clientY-sy))+'px';
+  });
+  const end=()=>{drag=false;};
+  head.addEventListener('pointerup',end);
+  head.addEventListener('pointercancel',end);
+}
+// 下端ハンドルで body の高さ（max-height）を調整。グリップが画面外に出ない範囲に制限。
+function makePanelResizable(handle, body){
+  if(!handle||!body)return;
+  let active=false,startY=0,startH=0;
+  handle.addEventListener('pointerdown',e=>{
+    active=true;startY=e.clientY;startH=body.getBoundingClientRect().height;
+    handle.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+  });
+  handle.addEventListener('pointermove',e=>{
+    if(!active)return;
+    const top=body.getBoundingClientRect().top;
+    const max=Math.max(80,window.innerHeight-top-24);
+    const h=Math.min(max,Math.max(80,startH+(e.clientY-startY)));
+    body.style.maxHeight=h+'px';body.style.height=h+'px';
+  });
+  const end=()=>{active=false;};
+  handle.addEventListener('pointerup',end);
+  handle.addEventListener('pointercancel',end);
+}
+makePanelDraggable($('#cards'),$('#cards-head'));
+makePanelResizable($('#cards-resize'),$('#cards-body'));
+makePanelDraggable($('#fx-modal'),$('#fx-head'));
+makePanelResizable($('#fx-resize'),$('#fx-body'));
+
 /* ============================================================
    SPEC_06 P3: COPY FOR COMPOSER — TAKE→composer CAMERAトラックJSON
    MVP=カメラだけ変換（絵はcomposer側で別途IMPORT）。値の写像はSPEC_06 §8:
@@ -2006,22 +2073,31 @@ async function copyForComposer(){
   const cp=$('#cvt-copy');if(cp)cp.addEventListener('click',copyForComposer);
 }
 
-/* ---------- project copy/paste/clear ---------- */
-async function copyProj(){
-  const j=JSON.stringify(PROJECT);
-  try{await navigator.clipboard.writeText(j);toast('PROJECT JSON をコピーしました');}
-  catch(e){window.prompt('COPY PROJECT JSON:',j);}
+/* ---------- project export/import (file) / clear ---------- */
+// animator/composer と同じ「ファイルで書き出し/読み込み」に統一（メモ帳へ貼る手間なし）
+function exportProjJSON(){
+  const blob=new Blob([JSON.stringify(PROJECT)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href=url; a.download=`oban_${ts}.json`; a.click();
+  URL.revokeObjectURL(url);
+  toast('PROJECT JSON を書き出しました');
 }
-async function pasteProj(){
-  let j='';
-  try{j=await navigator.clipboard.readText();}catch(e){j=window.prompt('PASTE PROJECT JSON:')||'';}
+function loadProjFromText(j){
   try{
     const p=JSON.parse(j);
-    if(p&&Array.isArray(p.panels)){PROJECT=migrate(p);rebuild();toast('PROJECT を読み込みました — 画像は再ドロップ');apRestore();apAnnounce();}   // SPEC_07: ap-seqも復元/再同期
+    if(p&&Array.isArray(p.panels)){PROJECT=migrate(p);rebuild();toast('PROJECT を読み込みました — 画像は再ドロップ');apRestore();apAnnounce();}
+    else toast('OBANのプロジェクトJSONではありません');
   }catch(e){toast('JSONが読めませんでした');}
 }
-$('#b-copy').addEventListener('click',copyProj);
-$('#b-paste').addEventListener('click',pasteProj);
+$('#b-export-json').addEventListener('click',exportProjJSON);
+$('#b-import-json').addEventListener('click',()=>$('#oban-json-input').click());
+$('#oban-json-input').addEventListener('change',async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value='';
+  if(f) loadProjFromText(await f.text());
+});
+$('#b-home').addEventListener('click',()=>{ location.href='index.html'; });
 $('#b-guide').addEventListener('click',toggleGuides);
 $('#b-clear').addEventListener('click',()=>{
   if(!confirm('プロジェクトを空にします。よろしいですか？'))return;

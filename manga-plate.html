@@ -530,6 +530,7 @@ $('#plate-w').addEventListener('change',ev=>{PLATE.w=clamp(parseInt(ev.target.va
 $('#plate-h').addEventListener('change',ev=>{PLATE.h=clamp(parseInt(ev.target.value)||1080,64,8192);syncPlateUI();commit();fitView();});
 $('#plate-bg').addEventListener('change',ev=>{PLATE.bg=ev.target.value;commit();});
 $('#plate-name').addEventListener('change',()=>{PLATE.name=$('#plate-name').value;save();});
+$('#btn-home').addEventListener('click',()=>{location.href='index.html';});
 $('#btn-fit').addEventListener('click',fitView);
 $('#add-frame').addEventListener('click',()=>addElem('frame'));
 $('#add-tone').addEventListener('click',()=>addElem('tone'));

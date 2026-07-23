@@ -114,8 +114,9 @@ input[type=number]{-moz-appearance:textfield;}
 .tl-track{position:relative;height:var(--track-h,54px);border-bottom:1px solid rgba(255,255,255,0.16);display:flex;align-items:center;padding-left:14px;cursor:pointer;transition:background 0.1s;}
 .tl-track:first-child{border-top:1px solid rgba(255,255,255,0.16);}
 .tl-track:hover{background:rgba(255,255,255,0.02);}
-.tl-track.selected{background:rgba(255,79,168,0.04);}
+.tl-track.selected{background:rgba(255,79,168,0.10);box-shadow:inset 3px 0 0 var(--acid);}
 .tl-track.selected .tl-track-name{color:var(--acid);}
+.tl-track.selected .tl-track-name .num{text-shadow:0 0 6px rgba(255,79,168,0.5);}
 .tl-track-label{width:128px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding-right:6px;overflow:hidden;}
 .tl-track-name{font-size:12px;letter-spacing:0.08em;color:rgba(255,255,255,0.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tl-track-name .num{color:var(--acid);margin-right:4px;}
@@ -367,8 +368,16 @@ input[type=number]{-moz-appearance:textfield;}
 /* ── MOTION COMIC: カメラトラック＝ice / PARENTセレクト ── */
 .tl-track.tl-cam .tl-track-name{color:var(--ice);text-shadow:0 0 6px rgba(90,233,255,0.4);}
 .tl-track.tl-cam{background:rgba(90,233,255,0.03);}
+/* SPEC_11 P5-1: CAMERA選択は ice を保ったまま強調（selected の acid ボーダーを上書き） */
+.tl-track.tl-cam.selected{background:rgba(90,233,255,0.12);box-shadow:inset 3px 0 0 var(--ice);}
+.tl-track.tl-cam.selected .tl-track-name{color:var(--ice);}
+.tl-track.tl-cam.selected .tl-track-name .num{text-shadow:0 0 8px rgba(90,233,255,0.7);}
 #kf-parent{flex:1;background:rgba(0,0,0,0.5);border:1px solid var(--border);color:var(--ice);font-family:var(--mono);font-size:9px;padding:2px 4px;outline:none;min-width:0;}
 #kf-parent option{background:#000;color:var(--ice);}
+/* SPEC_11 P5-2: CAMERA行の親(NULL)選択セレクト（削除ボタン横の小型プルダウン） */
+.tl-parent-sel{max-width:58px;background:rgba(0,0,0,0.5);border:1px solid var(--border);color:var(--ice);font-family:var(--mono);font-size:8px;letter-spacing:0;padding:1px 2px;outline:none;cursor:pointer;line-height:1.4;}
+.tl-parent-sel:hover{border-color:var(--border-bright);}
+.tl-parent-sel option{background:#000;color:var(--ice);}
 .tl-parent-mark{color:var(--ice);margin-left:4px;font-size:8px;}
 /* ── ミニグラフ（値/速度カーブ）── */
 #tl-graph{position:relative;height:74px;flex-shrink:0;border-top:1px solid var(--border);background:rgba(0,0,0,0.35);display:none;}
@@ -1352,6 +1361,7 @@ function cloneEditState(){
       parent: t.parent||null,
       visible: t.visible!==false,
       solo: !!t.solo,
+      name: t.name, // SPEC_11 P5-4: 改名を undo 対象に
     })),
     gmarkers: state.markers.map(m=>({...m})),
     selectedTrack: state.selectedTrack,
@@ -1460,6 +1470,7 @@ function applyHistory(snap){
     t.keyframes = ALL_PROPS.reduce((o,p)=>({...o,[p]:pt.keyframes[p].map(k=>({...k}))}),{});
     t.markers = pt.markers.map(m=>({...m}));
     t.parent = pt.parent; t.visible = pt.visible; t.solo = pt.solo;
+    if('name' in pt) t.name = pt.name; // SPEC_11 P5-4: 改名の undo/redo
   });
   sanitizeParents();
   if(snap.gmarkers) state.markers = snap.gmarkers.map(m=>({...m}));
@@ -1483,6 +1494,9 @@ function refreshTrackChainMarks(){
       s.className='tl-parent-mark'; s.title='親トラックあり'; s.textContent='⛓';
       nameEl.appendChild(s);
     } else if(!t.parent&&mark) mark.remove();
+    // SPEC_11 P5-2: CAMERA行の親セレクトも同期（インスペクタ側で変えても一致させる）
+    const psel=el.querySelector('.tl-parent-sel');
+    if(psel && document.activeElement!==psel){ psel.value=t.parent||''; if(psel.value!==(t.parent||'')) psel.value=''; }
   });
 }
 function undo(){
@@ -1733,6 +1747,15 @@ function sanitizeParents(){
   const ids=new Set(state.tracks.map(t=>t.tid));
   state.tracks.forEach(t=>{ if(t.parent&&!ids.has(t.parent)) t.parent=null; });
 }
+// SPEC_11 P5-5: CAMERA は常に state.tracks 末尾（=タイムライン最上段）に固定。
+// 合成順は getCamAt が別管理（drawFrame は camera をスキップ）なので配列位置は表示順のためだけ。
+function pinCameraTop(){
+  const ci=state.tracks.findIndex(t=>t.type==='camera');
+  if(ci>=0 && ci!==state.tracks.length-1){
+    const [c]=state.tracks.splice(ci,1);
+    state.tracks.push(c);
+  }
+}
 function finishImport(){
   dedupeCameras(); sanitizeParents();
   state.totalFrames=Math.max(...state.tracks.map(t=>t.totalFrames));
@@ -1767,13 +1790,15 @@ function addCameraTrack(){
 // カメラの親にすると OBAN 由来のカメラKFを丸ごとオフセット/回転/ズーム調整できる
 function addNullTrack(){
   if(!state.tracks.length){ flashLive('先にプロジェクトを読み込んでください'); return; }
-  state.tracks.push({
+  const nt={
     projectId:null, tid:newTid(), type:'null', parent:null,
     name:'NULL '+(state.tracks.filter(t=>t.type==='null').length+1),
     width:0, height:0, cellsRaw:[], cellInfos:[], frames:[], totalFrames:0,
     keyframes:makeEmptyKfs(), markers:[], visible:true, solo:false,
-  });
-  state.selectedTrack=state.tracks.length-1;
+  };
+  state.tracks.push(nt);
+  pinCameraTop(); // SPEC_11 P5-5: camera を末尾へ戻すため、選択は index ではなく実体で取り直す
+  state.selectedTrack=state.tracks.indexOf(nt);
   rebuildAllTrackUI();
   updateInspector(); updateKfUI(); drawCurrentFrame();
   recordHistory();
@@ -1934,7 +1959,10 @@ function doTrackReorder(clientY, fromStateIdx){
   const allTrackEls=[...container.querySelectorAll('.tl-track')];
   const N=state.tracks.length;
   const fromUIIdx=N-1-fromStateIdx;
-  const [track]=state.tracks.splice(fromStateIdx,1);
+  const track=state.tracks[fromStateIdx];
+  if(!track||track.type==='camera'){ rebuildAllTrackUI(); return; } // SPEC_11 P5-5: カメラは並び替え不可
+  const selTid=selTrack()?selTrack().tid:null; // 選択は tid で追う（pin でindexがずれるため）
+  state.tracks.splice(fromStateIdx,1);
   const remaining=allTrackEls.filter((_,i)=>i!==fromUIIdx);
   let insertUISlot=remaining.length;
   for(let i=0;i<remaining.length;i++){
@@ -1943,11 +1971,10 @@ function doTrackReorder(clientY, fromStateIdx){
   }
   const insertIdx=Math.max(0,(N-1)-insertUISlot);
   state.tracks.splice(insertIdx,0,track);
-  // Fix selectedTrack index
-  let sel=state.selectedTrack;
-  if(sel===fromStateIdx){sel=insertIdx;}
-  else{if(sel>fromStateIdx)sel--;if(sel>=insertIdx)sel++;}
-  state.selectedTrack=Math.max(0,Math.min(N-1,sel));
+  pinCameraTop(); // SPEC_11 P5-5: カメラより上には入れない（カメラを末尾へ戻す＝他は最大2番目まで）
+  // 選択を tid で復元（pin 後のindexで引き直す）
+  const si=selTid!=null?state.tracks.findIndex(t=>t.tid===selTid):-1;
+  state.selectedTrack=si>=0?si:Math.max(0,Math.min(state.tracks.length-1,state.selectedTrack));
   rebuildAllTrackUI();
   recordHistory();
 }
@@ -1987,20 +2014,28 @@ function buildTrackElement(idx){
     const ind=$('#tl-drop-indicator'); if(ind) ind.style.display='none';
   }
   function attachTrackDrag(node, immediate){
+    let capPid=null;
     node.addEventListener('pointerdown',e=>{
       if(e.button!==0&&e.pointerType==='mouse') return;
       if(!immediate){
         // ボタン群や改名中の入力欄からはドラッグを始めない
         if(e.target.closest('.tl-track-btns')||e.target.tagName==='INPUT') return;
       }
-      dhStartY=e.clientY;
-      if(immediate){ e.stopPropagation(); e.preventDefault(); dhBegin(); }
-      else dhPending=true;   // 動き出すまでは通常のクリック扱い
-      // ポインタキャプチャは失敗しても致命的でないので状態確定の後に
-      try{ node.setPointerCapture(e.pointerId); }catch(err){}
+      dhStartY=e.clientY; capPid=e.pointerId;
+      if(immediate){
+        e.stopPropagation(); e.preventDefault(); dhBegin();
+        try{ node.setPointerCapture(e.pointerId); }catch(err){}
+      } else {
+        dhPending=true;   // 動き出すまでは通常のクリック扱い
+        // SPEC_11 P5-4: ラベルは即captureしない。即captureするとダブルクリック改名が死ぬため、
+        // 4px動いてドラッグ確定した時点(pointermove)で初めてcaptureする。
+      }
     });
     node.addEventListener('pointermove',e=>{
-      if(dhPending&&Math.abs(e.clientY-dhStartY)>4) dhBegin();
+      if(dhPending&&Math.abs(e.clientY-dhStartY)>4){
+        dhBegin();
+        try{ node.setPointerCapture(capPid!=null?capPid:e.pointerId); }catch(err){}
+      }
       if(!dhActive) return;
       dhGhost.style.top=(dhOrigR.top+e.clientY-dhStartY)+'px';
       updateDropIndicator(e.clientY,idx);
@@ -2008,16 +2043,25 @@ function buildTrackElement(idx){
     node.addEventListener('pointerup',e=>{
       dhPending=false;
       if(!dhActive) return;
-      dhActive=false; dhCleanup();
-      doTrackReorder(e.clientY,idx);
+      dhActive=false;
+      // SPEC_11 P5-3: reorder中に rebuild/例外が挟まってもゴーストを必ず消す
+      try{ doTrackReorder(e.clientY,idx); } finally{ dhCleanup(); }
     });
     node.addEventListener('pointercancel',()=>{
       dhPending=false;
       if(!dhActive) return;
       dhActive=false; dhCleanup();
     });
+    // SPEC_11 P5-3: captureが外れた時も残骸を残さない
+    node.addEventListener('lostpointercapture',()=>{
+      dhPending=false;
+      if(!dhActive) return;
+      dhActive=false; dhCleanup();
+    });
   }
-  attachTrackDrag(dragHandle,true);
+  // SPEC_11 P5-5: CAMERA は並び替え不可（常に最上固定）。ハンドルは無効化して見せる
+  if(track.type!=='camera') attachTrackDrag(dragHandle,true);
+  else { dragHandle.style.opacity='0.15'; dragHandle.style.cursor='default'; dragHandle.title='CAMERAは常に最上段に固定'; }
 
   // Label
   const label=document.createElement('div');
@@ -2036,15 +2080,19 @@ function buildTrackElement(idx){
     nameEl.innerHTML=''; nameEl.appendChild(inp);
     inp.focus(); inp.select();
     const nameHTML=v=>`<span class="num">${track.type==='camera'?'🎥':track.type==='null'?'◇':String(idx+1).padStart(2,'0')}</span>${v}${track.parent?'<span class="tl-parent-mark" title="親トラックあり">⛓</span>':''}`;
+    let done=false; // Escape確定後の blur 二重発火で名前が上書きされるのを防ぐ
     const commit=()=>{
+      if(done) return; done=true;
       const v=inp.value.trim().toUpperCase()||'TRACK';
+      const changed=(track.name||'TRACK')!==v;
       track.name=v;
       nameEl.innerHTML=nameHTML(v);
+      if(changed) recordHistory(); // SPEC_11 P5-4: 改名を undo/自動保存の対象に
     };
     inp.addEventListener('blur',commit);
     inp.addEventListener('keydown',ev=>{
       if(ev.key==='Enter'){inp.blur();ev.stopPropagation();}
-      else if(ev.key==='Escape'){nameEl.innerHTML=nameHTML((track.name||'TRACK').toUpperCase());ev.stopPropagation();}
+      else if(ev.key==='Escape'){done=true;nameEl.innerHTML=nameHTML((track.name||'TRACK').toUpperCase());ev.stopPropagation();}
     });
   });
 
@@ -2088,15 +2136,50 @@ function buildTrackElement(idx){
   delBtn.title='トラック削除';
   delBtn.addEventListener('click',e=>{e.stopPropagation();removeTrack(idx);});
 
+  // SPEC_11 P5-2: CAMERA行に親(NULL)選択プルダウン（削除ボタンの左隣）。
+  // これで親子関係が行を見ただけで分かり、getCamAt が使う camT.parent を直接読み書きする。
+  let camParentSel=null;
+  if(track.type==='camera'){
+    camParentSel=document.createElement('select');
+    camParentSel.className='tl-parent-sel';
+    camParentSel.title='カメラの親（NULLトラック）。NULLの移動/回転/ズームにカメラが追従';
+    const fillCamParent=()=>{
+      camParentSel.innerHTML='';
+      camParentSel.appendChild(new Option('PRNT:—',''));
+      state.tracks.forEach(nt=>{ if(nt.type==='null') camParentSel.appendChild(new Option((nt.name||'NULL').toUpperCase(),nt.tid)); });
+      camParentSel.value=track.parent||'';
+      if(camParentSel.value!==(track.parent||'')) camParentSel.value=''; // 参照切れガード
+    };
+    fillCamParent();
+    // 行選択/ドラッグと干渉させない
+    camParentSel.addEventListener('pointerdown',e=>e.stopPropagation());
+    camParentSel.addEventListener('click',e=>e.stopPropagation());
+    camParentSel.addEventListener('focus',fillCamParent); // 開く直前に最新のNULL一覧へ
+    camParentSel.addEventListener('change',e=>{
+      e.stopPropagation();
+      track.parent=camParentSel.value||null;
+      refreshTrackChainMarks(); drawCurrentFrame(); recordHistory();
+      updateParentSelect(); // インスペクタ側も同期
+      const p=track.parent?state.tracks.find(x=>x.tid===track.parent):null;
+      flashLive(p?('⛓ CAM PARENT → '+(p.name||'NULL')):'⛓ CAM PARENT NONE');
+    });
+  }
+
   btns.appendChild(visBtn);
   if(track.type!=='camera'){ btns.appendChild(soloBtn); btns.appendChild(pngBtn); } // カメラにSOLO/PNGは無意味
   if(track.type!=='camera'&&track.projectId){ btns.appendChild(aniBtn); btns.appendChild(reBtn); } // SPEC_07
+  if(camParentSel) btns.appendChild(camParentSel); // 削除ボタンの左隣
   btns.appendChild(delBtn);
   label.appendChild(nameEl); label.appendChild(btns);
-  // 「01 TRACK」やラベルの余白を掴んでも並び替えできる（⠿は細くて掴みにくいため）
-  label.title='ドラッグで並び替え（ダブルクリックで名前変更）';
-  label.style.cursor='grab';
-  attachTrackDrag(label,false);
+  if(track.type!=='camera'){
+    // 「01 TRACK」やラベルの余白を掴んでも並び替えできる（⠿は細くて掴みにくいため）
+    label.title='ドラッグで並び替え（ダブルクリックで名前変更）';
+    label.style.cursor='grab';
+    attachTrackDrag(label,false);
+  } else {
+    // SPEC_11 P5-5: CAMERAは並び替え不可。改名(dblclick)は有効なまま。
+    label.title='ダブルクリックで名前変更（CAMERAは常に最上段で固定）';
+  }
 
   // Strip
   const strip=document.createElement('div');
@@ -2160,10 +2243,14 @@ function updateTrackHeights(){
 
 function rebuildAllTrackUI(){
   const container=$('#tl-tracks');
+  // SPEC_11 P5-3: 並び替え中に body 直下へ孤児化したゴーストが残ることがあるので掃除
+  document.querySelectorAll('.tl-drag-ghost').forEach(n=>n.remove());
+  // SPEC_11 P5-5: CAMERA を常に最上段に固定（配列末尾へ寄せる）
+  pinCameraTop();
   // Preserve the audio row before clearing
   const audioRow=$('#tl-audio-row');
   container.innerHTML='';
-  // UI top = front (tracks[N-1]), bottom = BG (tracks[0])
+  // UI top = front (tracks[N-1]), bottom = BG (tracks[0]) ／ CAMERA は末尾なので常に最上
   for(let i=state.tracks.length-1;i>=0;i--){
     container.appendChild(buildTrackElement(i));
   }
@@ -3776,7 +3863,7 @@ $('#tl-graph-mode').addEventListener('click',()=>{
   renderGraph();
 });
 $('#kf-parent').addEventListener('change',()=>{
-  const t=selTrack(); if(!t||t.type==='camera') return;
+  const t=selTrack(); if(!t) return; // SPEC_11 P5-2: カメラも許可（親=NULLのみは updateParentSelect が候補制限）
   t.parent=$('#kf-parent').value||null;
   refreshTrackChainMarks(); // ⛓マーク更新（ラベルのみ。全再構築は不要）
   drawCurrentFrame(); recordHistory();
